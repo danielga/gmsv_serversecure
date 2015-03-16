@@ -1,7 +1,5 @@
 #include <netfilter.hpp>
 #include <convar.h>
-#include <unordered_set>
-#include <symbolfinder.hpp>
 
 #if defined _WIN32
 
@@ -11,11 +9,22 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <errno.h>
 
 #endif
 
+#if defined __linux || defined __APPLE__
+
+#undef min
+#undef max
+
+#endif
+
 #include <detours.h>
+#include <symbolfinder.hpp>
+#include <unordered_set>
 
 namespace NetFilter
 {
@@ -326,7 +335,8 @@ LUA_FUNCTION_STATIC( RemoveIP )
 
 LUA_FUNCTION_STATIC( WhitelistReset )
 {
-	filter.swap( std::unordered_set<uint32_t>( ) );
+	std::unordered_set<uint32_t> empty;
+	filter.swap( empty );
 	return 0;
 }
 
