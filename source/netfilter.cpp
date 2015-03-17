@@ -29,38 +29,6 @@
 namespace NetFilter
 {
 
-/*#if defined _WIN32
-
-static const char *engine_lib = "engine.dll";
-
-static const char *NET_SendTo_sym = "\x55\x8B\xEC\x51\x8B\x0D\x2A\x2A\x2A\x2A\x83\xB9\x0C\x10\x00\x00";
-static const size_t NET_SendTo_symlen = 16;
-
-static const char *NET_SendToImpl_sym = "\x55\x8B\xEC\x8B\x45\x18\x8B\x4D\x14\x8B\x55\x10\x50\x8B\x45\x0C";
-static const size_t NET_SendToImpl_symlen = 16;
-
-#elif defined __linux
-
-static const char *engine_lib = "bin/engine_srv.so";
-
-static const char *NET_SendTo_sym = "_Z10NET_SendTobiPKciPK8sockaddrii";
-static const size_t NET_SendTo_symlen = 0;
-
-static const char *NET_SendToImpl_sym = "_Z14NET_SendToImpliPKciPK8sockaddrii";
-static const size_t NET_SendToImpl_symlen = 0;
-
-#elif defined __APPLE__
-
-static const char *engine_lib = "engine.dylib";
-
-static const char *NET_SendTo_sym = "__Z10NET_SendTobiPKciPK8sockaddrii";
-static const size_t NET_SendTo_symlen = 0;
-
-static const char *NET_SendToImpl_sym = "__Z14NET_SendToImpliPKciPK8sockaddrii";
-static const size_t NET_SendToImpl_symlen = 0;
-
-#endif*/
-
 typedef int32_t ( *Hook_recvfrom_t )(
 	int32_t s,
 	char *buf,
@@ -69,25 +37,6 @@ typedef int32_t ( *Hook_recvfrom_t )(
 	sockaddr *from,
 	int32_t *fromlen
 );
-
-/*typedef int32_t ( *NET_SendTo_t )(
-	bool verbose,
-	SOCKET s,
-	const char *buf,
-	int32_t len,
-	const sockaddr *to,
-	int32_t tolen,
-	int32_t iGameDataLength
-);
-
-typedef int32_t ( *NET_SendToImpl_t )(
-	SOCKET s,
-	const char *buf,
-	int32_t len,
-	const sockaddr *to,
-	int32_t tolen,
-	int32_t iGameDataLength
-);*/
 
 struct Packet_t
 {
@@ -102,11 +51,9 @@ static ConVarRef sv_max_queries_sec_global( "sv_max_queries_sec_global", true );
 static ConVarRef sv_max_queries_window( "sv_max_queries_window", true );
 
 static Hook_recvfrom_t Hook_recvfrom = nullptr;
-/*static NET_SendTo_t NET_SendTo = nullptr;
-static MologieDetours::Detour<NET_SendTo_t> *NET_SendTo_detour = nullptr;
-static NET_SendToImpl_t NET_SendToImpl = nullptr;
-static MologieDetours::Detour<NET_SendToImpl_t> *NET_SendToImpl_detour = nullptr;*/
 static std::unordered_set<uint32_t> filter;
+static bool check_packets = false;
+static bool check_addresses = false;
 
 static bool IsDataValid( char *data, int32_t len, sockaddr_in *from )
 {
@@ -194,6 +141,11 @@ static bool IsDataValid( char *data, int32_t len, sockaddr_in *from )
 
 }
 
+inline bool IsAddressWhitelisted( const sockaddr_in *addr )
+{
+	return filter.find( ntohl( addr->sin_addr.s_addr ) ) != filter.end( );
+}
+
 #if defined _WIN32
 
 inline int32_t SetNetError( )
@@ -212,11 +164,6 @@ inline int32_t SetNetError( )
 
 #endif
 
-inline bool IsAddressWhitelisted( const sockaddr_in *addr )
-{
-	return filter.find( ntohl( addr->sin_addr.s_addr ) ) != filter.end( );
-}
-
 static int32_t Hook_recvfrom_d(
 	int32_t s,
 	char *buf,
@@ -226,96 +173,41 @@ static int32_t Hook_recvfrom_d(
 	int32_t *fromlen
 )
 {
+	sockaddr_in *infrom = reinterpret_cast<sockaddr_in *>( from );
 	for( int32_t i = 0; i < 2 || !ss_oob_conservative.GetBool( ); ++i )
 	{
 		int32_t dataLen = Hook_recvfrom( s, buf, len, flags, from, fromlen );
-		if( dataLen == -1 )
+		if( dataLen == -1 || ( check_addresses && !IsAddressWhitelisted( infrom ) ) )
 			return SetNetError( );
 
-		if( !IsAddressWhitelisted( reinterpret_cast<sockaddr_in *>( from ) ) )
-			return SetNetError( );
-
-		if( IsDataValid( buf, dataLen, reinterpret_cast<sockaddr_in *>( from ) ) )
+		if( !check_packets || IsDataValid( buf, dataLen, infrom ) )
 			return dataLen;
 	}
 
 	return SetNetError( );
 }
 
-/*static int32_t NET_SendTo_d(
-	bool verbose,
-	SOCKET s,
-	const char *buf,
-	int32_t len,
-	const sockaddr *to,
-	int32_t tolen,
-	int32_t iGameDataLength
-)
+inline void EnableDetour( bool enable )
 {
-	if( !IsAddressWhitelisted( reinterpret_cast<const sockaddr_in *>( to ) ) )
-		return SetNetError( );
-
-	return NET_SendTo( verbose, s, buf, len, to, tolen, iGameDataLength );
+	if( enable )
+		g_pVCR->Hook_recvfrom = Hook_recvfrom_d;
+	else if( !check_addresses && !check_packets )
+		g_pVCR->Hook_recvfrom = Hook_recvfrom;
 }
-
-static int32_t NET_SendToImpl_d(
-	SOCKET s,
-	const char *buf,
-	int32_t len,
-	const sockaddr *to,
-	int32_t tolen,
-	int32_t iGameDataLength
-)
-{
-	if( !IsAddressWhitelisted( reinterpret_cast<const sockaddr_in *>( to ) ) )
-		return SetNetError( );
-
-	return NET_SendToImpl( s, buf, len, to, tolen, iGameDataLength );
-}*/
 
 LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+	check_addresses = LUA->GetBool( 1 );
+	EnableDetour( check_addresses );
+	return 0;
+}
 
-	if( LUA->GetBool( 1 ) )
-	{
-		g_pVCR->Hook_recvfrom = Hook_recvfrom_d;
-
-/*		if( NET_SendTo_detour == nullptr )
-		{
-			NET_SendTo_detour = new( std::nothrow ) MologieDetours::Detour<NET_SendTo_t>(
-				NET_SendTo, NET_SendTo_d
-			);
-			if( NET_SendTo_detour == nullptr )
-				LUA->ThrowError( "failed to detour NET_SendTo" );
-		}
-
-		if( NET_SendToImpl_detour == nullptr )
-		{
-			NET_SendToImpl_detour = new( std::nothrow ) MologieDetours::Detour<NET_SendToImpl_t>(
-				NET_SendToImpl, NET_SendToImpl_d
-				);
-			if( NET_SendToImpl_detour == nullptr )
-				LUA->ThrowError( "failed to detour NET_SendToImpl" );
-		}*/
-	}
-	else
-	{
-		g_pVCR->Hook_recvfrom = Hook_recvfrom;
-
-/*		if( NET_SendTo_detour != nullptr )
-		{
-			delete NET_SendTo_detour;
-			NET_SendTo_detour = nullptr;
-		}
-
-		if( NET_SendToImpl_detour != nullptr )
-		{
-			delete NET_SendToImpl_detour;
-			NET_SendToImpl_detour = nullptr;
-		}*/
-	}
-
+LUA_FUNCTION_STATIC( EnablePacketValidation )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+	check_packets = LUA->GetBool( 1 );
+	EnableDetour( check_packets );
 	return 0;
 }
 
@@ -335,27 +227,12 @@ LUA_FUNCTION_STATIC( RemoveIP )
 
 LUA_FUNCTION_STATIC( WhitelistReset )
 {
-	std::unordered_set<uint32_t> empty;
-	filter.swap( empty );
+	std::unordered_set<uint32_t>( ).swap( filter );
 	return 0;
 }
 
 void Initialize( lua_State *state )
 {
-/*	SymbolFinder symfinder;
-
-	NET_SendTo = reinterpret_cast<NET_SendTo_t>(
-		symfinder.ResolveOnBinary( engine_lib, NET_SendTo_sym, NET_SendTo_symlen )
-	);
-	if( NET_SendTo == nullptr )
-		LUA->ThrowError( "unable to get NET_SendTo" );
-
-	NET_SendToImpl = reinterpret_cast<NET_SendToImpl_t>(
-		symfinder.ResolveOnBinary( engine_lib, NET_SendToImpl_sym, NET_SendToImpl_symlen )
-	);
-	if( NET_SendToImpl == nullptr )
-		LUA->ThrowError( "unable to get NET_SendToImpl" );*/
-
 	g_pCVar->RegisterConCommand( &ss_show_oob );
 	g_pCVar->RegisterConCommand( &ss_oob_conservative );
 
@@ -406,18 +283,6 @@ void Deinitialize( lua_State *state )
 
 	g_pCVar->UnregisterConCommand( &ss_show_oob );
 	g_pCVar->UnregisterConCommand( &ss_oob_conservative );
-
-/*	if( NET_SendTo_detour != nullptr )
-	{
-		delete NET_SendTo_detour;
-		NET_SendTo_detour = nullptr;
-	}
-
-	if( NET_SendToImpl_detour != nullptr )
-	{
-		delete NET_SendToImpl_detour;
-		NET_SendToImpl_detour = nullptr;
-	}*/
 }
 
 }
