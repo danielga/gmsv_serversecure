@@ -249,6 +249,9 @@ void Initialize( lua_State *state )
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
 
+	LUA->PushCFunction( EnablePacketValidation );
+	LUA->SetField( -2, "EnablePacketValidation" );
+
 	LUA->PushCFunction( WhitelistIP );
 	LUA->SetField( -2, "WhitelistIP" );
 
@@ -267,6 +270,9 @@ void Deinitialize( lua_State *state )
 
 	LUA->PushNil( );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
+
+	LUA->PushNil( );
+	LUA->SetField( -2, "EnablePacketValidation" );
 
 	LUA->PushNil( );
 	LUA->SetField( -2, "WhitelistIP" );
