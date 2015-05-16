@@ -1,9 +1,0 @@
-[submodule "detouring"]
-	path = detouring
-	url = https://bitbucket.org/danielga/detouring.git
-[submodule "scanning"]
-	path = scanning
-	url = https://bitbucket.org/danielga/scanning.git
-[submodule "gmod-module-base"]
-	path = gmod-module-base
-	url = https://bitbucket.org/danielga/gmod-module-base.git
