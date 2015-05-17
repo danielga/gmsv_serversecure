@@ -10,7 +10,7 @@ namespace Global
 {
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
-static SourceSDK::FactoryLoader engine_loader( "engine" );
+static SourceSDK::FactoryLoader engine_loader( "engine", false );
 
 INetworkStringTableContainer *networkstringtable = nullptr;
 
