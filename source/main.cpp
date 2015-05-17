@@ -1,10 +1,10 @@
 #include <main.hpp>
+#include <interfaces.hpp>
 #include <netfilter.hpp>
 #include <filecheck.hpp>
 #include <interface.h>
 #include <convar.h>
 #include <networkstringtabledefs.h>
-#include <interfaces.hpp>
 
 namespace Global
 {
