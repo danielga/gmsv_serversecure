@@ -1,6 +1,7 @@
 #include <filecheck.hpp>
 #include <convar.h>
 #include <networkstringtabledefs.h>
+#include <interfaces.hpp>
 
 #if defined __linux || defined __APPLE__
 
@@ -15,23 +16,27 @@
 namespace FileCheck
 {
 
-#if defined _WIN32
+static std::string engine_lib = SourceSDK::GetBinaryFileName( "engine"
 
-static const char *engine_lib = "engine.dll";
+#if defined __linux
+
+	, true, true, "bin/"
+
+#endif
+
+);
+
+#if defined _WIN32
 
 static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\x57\x8B\x7D\x08\x85\xFF\x0F\x84";
 static size_t IsValidFileForTransfer_siglen = 17;
 
 #elif defined __linux
 
-static const char *engine_lib = "bin/engine_srv.so";
-
 static const char *IsValidFileForTransfer_sig = "_ZN8CNetChan22IsValidFileForTransferEPKc";
 static size_t IsValidFileForTransfer_siglen = 0;
 
 #elif defined __APPLE__
-
-static const char *engine_lib = "engine.dylib";
 
 static const char *IsValidFileForTransfer_sig = "__ZN8CNetChan22IsValidFileForTransferEPKc";
 static size_t IsValidFileForTransfer_siglen = 0;
@@ -93,7 +98,7 @@ void Initialize( lua_State * )
 
 	SymbolFinder symfinder;
 	IsValidFileForTransfer = reinterpret_cast<IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
-		engine_lib,
+		engine_lib.c_str( ),
 		IsValidFileForTransfer_sig,
 		IsValidFileForTransfer_siglen
 	) );

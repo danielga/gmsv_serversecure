@@ -27,6 +27,7 @@
 #include <unordered_set>
 #include <thread>
 #include <queue>
+#include <chrono>
 
 namespace NetFilter
 {
@@ -64,13 +65,17 @@ static ConVarRef sv_max_queries_sec_global( "sv_max_queries_sec_global", true );
 static ConVarRef sv_max_queries_window( "sv_max_queries_window", true );
 
 static Hook_recvfrom_t Hook_recvfrom = nullptr;
-static std::unordered_set<uint32_t> filter;
 static int32_t game_socket = -1;
-static std::thread *thread_socket = nullptr;
-static std::queue<packet> packet_queue;
+
 static bool check_packets = false;
 static bool check_addresses = false;
+static std::unordered_set<uint32_t> filter;
+
+static void Hook_recvfrom_thread( );
+static std::thread thread_socket( Hook_recvfrom_thread );
+static std::queue<packet> packet_queue;
 static bool threaded_socket = false;
+static bool thread_execute = true;
 
 static bool IsDataValid( const char *data, int32_t len, sockaddr_in *from )
 {
@@ -228,9 +233,23 @@ static int32_t Hook_recvfrom_d(
 
 static void Hook_recvfrom_thread( )
 {
+	std::chrono::milliseconds ms100 = std::chrono::milliseconds( 100 );
+	timeval cms100 = { 0, 100000 };
+	fd_set readables;
 	char tempbuf[65535] = { 0 };
-	while( threaded_socket )
+	while( thread_execute )
 	{
+		if( !threaded_socket )
+		{
+			std::this_thread::sleep_for( ms100 );
+			continue;
+		}
+
+		FD_ZERO( &readables );
+		FD_SET( static_cast<uint32_t>( game_socket ), &readables );
+		if( select( 1, &readables, nullptr, nullptr, &cms100 ) == -1 )
+			continue;
+
 		packet p;
 		sockaddr_in *infrom = reinterpret_cast<sockaddr_in *>( &p.address );
 		int32_t len = Hook_recvfrom( game_socket, tempbuf, sizeof( tempbuf ), 0, &p.address, &p.address_size );
@@ -273,24 +292,6 @@ LUA_FUNCTION_STATIC( EnableThreadedSocket )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 	threaded_socket = LUA->GetBool( 1 );
-
-	try
-	{
-		if( threaded_socket && thread_socket == nullptr )
-			thread_socket = new std::thread( Hook_recvfrom_thread );
-		else if( !threaded_socket && thread_socket != nullptr )
-		{
-			thread_socket->join( );
-			delete thread_socket;
-		}
-
-		LUA->PushBool( true );
-	}
-	catch( ... )
-	{
-		LUA->PushBool( false );
-	}
-
 	SetDetourStatus( threaded_socket );
 	return 1;
 }
@@ -328,8 +329,6 @@ void Initialize( lua_State *state )
 
 	Hook_recvfrom = g_pVCR->Hook_recvfrom;
 
-	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
-
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
 
@@ -347,33 +346,12 @@ void Initialize( lua_State *state )
 
 	LUA->PushCFunction( WhitelistReset );
 	LUA->SetField( -2, "WhitelistReset" );
-
-	LUA->Pop( 1 );
 }
 
 void Deinitialize( lua_State *state )
 {
-	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "EnableFirewallWhitelist" );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "EnablePacketValidation" );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "EnableThreadedSocket" );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "WhitelistIP" );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "RemoveIP" );
-
-	LUA->PushNil( );
-	LUA->SetField( -2, "WhitelistReset" );
-
-	LUA->Pop( 1 );
+	thread_execute = false;
+	thread_socket.join( );
 
 	g_pVCR->Hook_recvfrom = Hook_recvfrom;
 

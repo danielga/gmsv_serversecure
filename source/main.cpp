@@ -31,10 +31,25 @@ static void Initialize( lua_State *state )
 	);
 	if( networkstringtable == nullptr )
 		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
+
+	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
+
+	LUA->CreateTable( );
+	LUA->Push( -1 );
+	LUA->SetField( -3, "serversecure" );
+
+	LUA->Remove( -2 );
 }
 
-static void Deinitialize( lua_State * )
-{ }
+static void Deinitialize( lua_State *state )
+{
+	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
+
+	LUA->PushNil( );
+	LUA->SetField( -2, "serversecure" );
+
+	LUA->Pop( 1 );
+}
 
 }
 
