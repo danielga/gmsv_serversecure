@@ -1,17 +1,9 @@
 #include <filecheck.hpp>
-#include <convar.h>
-#include <networkstringtabledefs.h>
 #include <interfaces.hpp>
-
-#if defined __linux || defined __APPLE__
-
-#undef min
-#undef max
-
-#endif
-
 #include <symbolfinder.hpp>
 #include <detours.h>
+#include <convar.h>
+#include <networkstringtabledefs.h>
 
 namespace FileCheck
 {

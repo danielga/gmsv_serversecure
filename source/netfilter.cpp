@@ -1,4 +1,10 @@
 #include <netfilter.hpp>
+#include <detours.h>
+#include <symbolfinder.hpp>
+#include <unordered_set>
+#include <thread>
+#include <queue>
+#include <chrono>
 #include <convar.h>
 
 #if defined _WIN32
@@ -14,20 +20,6 @@
 #include <errno.h>
 
 #endif
-
-#if defined __linux || defined __APPLE__
-
-#undef min
-#undef max
-
-#endif
-
-#include <detours.h>
-#include <symbolfinder.hpp>
-#include <unordered_set>
-#include <thread>
-#include <queue>
-#include <chrono>
 
 namespace NetFilter
 {
