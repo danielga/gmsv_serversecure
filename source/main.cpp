@@ -4,46 +4,31 @@
 #include <interface.h>
 #include <convar.h>
 #include <networkstringtabledefs.h>
+#include <interfaces.hpp>
 
 namespace Global
 {
 
-#if defined _WIN32
-
-static CDllDemandLoader icvar_loader( "vstdlib.dll" );
-static CDllDemandLoader engine_loader( "engine.dll" );
-
-#elif defined __linux
-
-static CDllDemandLoader icvar_loader( "libvstdlib_srv.so" );
-static CDllDemandLoader engine_loader( "engine_srv.so" );
-
-#elif defined __APPLE__
-
-static CDllDemandLoader icvar_loader( "libvstdlib.dylib" );
-static CDllDemandLoader engine_loader( "engine.dylib" );
-
-#endif
+static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
+static SourceSDK::FactoryLoader engine_loader( "engine" );
 
 INetworkStringTableContainer *networkstringtable = nullptr;
 
 static void Initialize( lua_State *state )
 {
-	CreateInterfaceFn vstdlibfactory = icvar_loader.GetFactory( );
-	if( vstdlibfactory == nullptr )
+	if( !icvar_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get vstdlib factory" );
 
-	g_pCVar = reinterpret_cast<ICvar *>( vstdlibfactory( CVAR_INTERFACE_VERSION, nullptr ) );
+	if( !engine_loader.IsValid( ) )
+		LUA->ThrowError( "unable to get engine factory" );
+
+	g_pCVar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
 	if( g_pCVar == nullptr )
 		LUA->ThrowError( "unable to get ICvar" );
 
-	CreateInterfaceFn enginefactory = engine_loader.GetFactory( );
-	if( enginefactory == nullptr )
-		LUA->ThrowError( "unable to get engine factory" );
-
-	networkstringtable = reinterpret_cast<INetworkStringTableContainer *>(
-		enginefactory( INTERFACENAME_NETWORKSTRINGTABLESERVER, nullptr )
-		);
+	networkstringtable = engine_loader.GetInterface<INetworkStringTableContainer>(
+		INTERFACENAME_NETWORKSTRINGTABLESERVER
+	);
 	if( networkstringtable == nullptr )
 		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
 }
