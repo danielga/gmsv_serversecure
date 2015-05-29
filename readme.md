@@ -3,8 +3,7 @@ gmsv_serversecure
 
 A module for Garry's Mod that mitigates exploits on the Source engine.
 
-Info
--------
+## Info
 
 Mac was not tested at all (sorry but I'm cheap and lazy).
 
@@ -12,8 +11,8 @@ If stuff starts erroring or fails to work, be sure to check the correct line end
 
 This project requires garrysmod_common (https://bitbucket.org/danielga/garrysmod_common), a framework to facilitate the creation of compilations files (Visual Studio, make, XCode, etc). Simply set the environment variable 'GARRYSMOD_COMMON' or the premake option 'gmcommon' to the path of your local copy of garrysmod_common. We also use the SourceSDK, so set the environment variable 'SOURCE_SDK' or the premake option 'sourcesdk' to the path of your local copy of the SourceSDK (SourceSDK2013 is recommended, https://github.com/ValveSoftware/source-sdk-2013).
 
-Credits
--------
+## Credits
+
 Original versions from AzuiSleet
 http://gmodmodules.googlecode.com/svn/trunk/serverplugin_serversecure
 http://gmodmodules.googlecode.com/svn/trunk/serverplugin_serversecure2
