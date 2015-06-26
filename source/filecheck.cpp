@@ -1,5 +1,5 @@
 #include <filecheck.hpp>
-#include <interfaces.hpp>
+#include <helpers.hpp>
 #include <symbolfinder.hpp>
 #include <detours.h>
 #include <convar.h>
@@ -8,15 +8,7 @@
 namespace FileCheck
 {
 
-static std::string engine_lib = SourceSDK::GetBinaryFileName( "engine"
-
-#if defined __linux
-
-	, true, true, "bin/"
-
-#endif
-
-);
+static std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
 #if defined _WIN32
 
