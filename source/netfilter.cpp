@@ -204,7 +204,7 @@ static int32_t Hook_recvfrom_d(
 		}
 
 		if( packet_queue.empty( ) )
-			continue;
+			break;
 
 		packet p = packet_queue.front( );
 		packet_queue.pop( );
