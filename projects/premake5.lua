@@ -13,6 +13,7 @@ include(gmcommon)
 
 CreateSolution("serversecure")
 	CreateProject(SERVERSIDE)
+		warnings("Default")
+		IncludeSourceSDK()
 		IncludeDetouring()
 		IncludeScanning()
-		IncludeSourceSDK()
