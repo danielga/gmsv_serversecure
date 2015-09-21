@@ -1,8 +1,8 @@
 #pragma once
 
-#include <main.hpp>
+#include <GarrysMod/Lua/Interface.h>
 
-namespace FileCheck
+namespace filecheck
 {
 
 void Initialize( lua_State *state );

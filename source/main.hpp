@@ -1,11 +1,8 @@
 #pragma once
 
-#include <GarrysMod/Lua/Interface.h>
-#include <cstdint>
-
 class INetworkStringTableContainer;
 
-namespace Global
+namespace global
 {
 
 extern INetworkStringTableContainer *networkstringtable;

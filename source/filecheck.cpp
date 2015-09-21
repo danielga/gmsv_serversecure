@@ -1,11 +1,15 @@
 #include <filecheck.hpp>
+#include <main.hpp>
+#include <cstdint>
+#include <algorithm>
+#include <string>
 #include <helpers.hpp>
 #include <symbolfinder.hpp>
 #include <detours.h>
 #include <convar.h>
 #include <networkstringtabledefs.h>
 
-namespace FileCheck
+namespace filecheck
 {
 
 static std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
@@ -34,51 +38,92 @@ typedef bool( *IsValidFileForTransfer_t )( const char *file );
 static IsValidFileForTransfer_t IsValidFileForTransfer = nullptr;
 static MologieDetours::Detour<IsValidFileForTransfer_t> *IsValidFileForTransfer_detour = nullptr;
 
-static bool IsValidFileForTransfer_d( const char *file )
+static INetworkStringTable *downloads = nullptr;
+static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
+
+inline bool BlockDownload( const char *filepath )
 {
-	int32_t len = V_strlen( file );
-	if( file == nullptr || len == 0 )
-		return false;
-
 	if( ss_show_files.GetBool( ) )
-		Msg( "[ServerSecure] Checking file '%s'\n", file );
+		Msg( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 
-	if( !IsValidFileForTransfer( file ) )
-		return false;
-
-	INetworkStringTable *downloads = Global::networkstringtable->FindTable( "downloadables" );
-	if( downloads == nullptr )
-	{
-		Msg( "[ServerSecure] Missing 'downloadables' string table!\n" );
-		return false;
-	}
-
-	int32_t index = downloads->FindStringIndex( file );
-	if( index == INVALID_STRING_INDEX && ( len > 5 && V_strncmp( file, "maps/", 5 ) == 0 ) )
-	{
-		char ffile[260] = { 0 };
-		V_strncpy( ffile, file, sizeof( ffile ) );
-		V_FixSlashes( ffile );
-		index = downloads->FindStringIndex( file );
-	}
-
-	if( index != INVALID_STRING_INDEX )
-		return true;
-
-	if(
-		len == 22 &&
-		V_strncmp( file, "downloads/", 10 ) == 0 &&
-		V_strncmp( file + len - 4, ".dat", 4 ) == 0
-	)
-		return true;
-
-	Msg( "[ServerSecure] Blocking download: '%s'\n", file );
 	return false;
 }
 
-void Initialize( lua_State * )
+static bool IsValidFileForTransfer_d( const char *filepath )
 {
-	g_pCVar->RegisterConCommand( &ss_show_files );
+	if( filepath == nullptr )
+	{
+		if( ss_show_files.GetBool( ) )
+			Msg( "[ServerSecure] Invalid file to download (string pointer was NULL)\n" );
+
+		return false;
+	}
+
+	size_t len = strlen( filepath );
+	if( len == 0 )
+	{
+		if( ss_show_files.GetBool( ) )
+			Msg( "[ServerSecure] Invalid file to download (path length was 0)\n" );
+
+		return false;
+	}
+
+	std::string nicefile( filepath, len );
+	if( !V_RemoveDotSlashes( &nicefile[0] ) )
+		return BlockDownload( filepath );
+
+	len = strlen( nicefile.c_str( ) );
+	nicefile.resize( len );
+	filepath = nicefile.c_str( );
+
+	if( ss_show_files.GetBool( ) )
+		Msg( "[ServerSecure] Checking file \"%s\"\n", filepath );
+
+	if( !IsValidFileForTransfer( filepath ) )
+		return BlockDownload( filepath );
+
+	int32_t index = downloads->FindStringIndex( filepath );
+	if( index != INVALID_STRING_INDEX )
+		return true;
+
+	if( len == 22 && strncmp( filepath, downloads_dir, 10 ) == 0 && strncmp( filepath + len - 4, ".dat", 4 ) == 0 )
+		return true;
+
+	return BlockDownload( filepath );
+}
+
+LUA_FUNCTION_STATIC( EnableFileValidation )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+
+	bool detour = LUA->GetBool( 1 );
+	if( detour && IsValidFileForTransfer_detour == nullptr )
+	{
+		IsValidFileForTransfer_detour = new( std::nothrow ) MologieDetours::Detour<IsValidFileForTransfer_t>(
+			IsValidFileForTransfer,
+			IsValidFileForTransfer_d
+		);
+		LUA->PushBool( IsValidFileForTransfer_detour != nullptr );
+	}
+	else if( !detour && IsValidFileForTransfer_detour != nullptr )
+	{
+		delete IsValidFileForTransfer_detour;
+		IsValidFileForTransfer_detour = nullptr;
+		LUA->PushBool( true );
+	}
+	else
+	{
+		LUA->PushBool( false );
+	}
+
+	return 1;
+}
+
+void Initialize( lua_State *state )
+{
+	downloads = global::networkstringtable->FindTable( "downloadables" );
+	if( downloads == nullptr )
+		LUA->ThrowError( "missing \"downloadables\" string table" );
 
 	SymbolFinder symfinder;
 	IsValidFileForTransfer = reinterpret_cast<IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
@@ -87,15 +132,12 @@ void Initialize( lua_State * )
 		IsValidFileForTransfer_siglen
 	) );
 	if( IsValidFileForTransfer == nullptr )
-	{
-		Msg( "[ServerSecure] Unable to scan CNetChan::IsValidFileForTransfer!\n" );
-		return;
-	}
+		LUA->ThrowError( "unable to sigscan for CNetChan::IsValidFileForTransfer" );
 
-	IsValidFileForTransfer_detour = new MologieDetours::Detour<IsValidFileForTransfer_t>(
-		IsValidFileForTransfer,
-		IsValidFileForTransfer_d
-	);
+	g_pCVar->RegisterConCommand( &ss_show_files );
+
+	LUA->PushCFunction( EnableFileValidation );
+	LUA->SetField( -2, "EnableFileValidation" );
 }
 
 void Deinitialize( lua_State * )

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <main.hpp>
+#include <GarrysMod/Lua/Interface.h>
 
-namespace NetFilter
+namespace netfilter
 {
 
 void Initialize( lua_State *state );

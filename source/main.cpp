@@ -2,11 +2,10 @@
 #include <interfaces.hpp>
 #include <netfilter.hpp>
 #include <filecheck.hpp>
-#include <interface.h>
 #include <convar.h>
 #include <networkstringtabledefs.h>
 
-namespace Global
+namespace global
 {
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
@@ -32,39 +31,39 @@ static void Initialize( lua_State *state )
 	if( networkstringtable == nullptr )
 		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
 
-	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
-
 	LUA->CreateTable( );
-	LUA->Push( -1 );
-	LUA->SetField( -3, "serversecure" );
 
-	LUA->Remove( -2 );
+	LUA->PushString( "serversecure 1.0.0" );
+	LUA->SetField( -2, "Version" );
+
+	// version num follows LuaJIT style, xxyyzz
+	LUA->PushNumber( 10000 );
+	LUA->SetField( -2, "VersionNum" );
+
+	LUA->Push( -1 );
+	LUA->SetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
 }
 
 static void Deinitialize( lua_State *state )
 {
-	LUA->PushSpecial( GarrysMod::Lua::SPECIAL_GLOB );
-
 	LUA->PushNil( );
-	LUA->SetField( -2, "serversecure" );
-
-	LUA->Pop( 1 );
+	LUA->SetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
 }
 
 }
 
 GMOD_MODULE_OPEN( )
 {
-	Global::Initialize( state );
-	NetFilter::Initialize( state );
-	//FileCheck::Initialize( state );
-	return 0;
+	global::Initialize( state );
+	netfilter::Initialize( state );
+	filecheck::Initialize( state );
+	return 1;
 }
 
 GMOD_MODULE_CLOSE( )
 {
-	//FileCheck::Deinitialize( state );
-	NetFilter::Deinitialize( state );
-	Global::Initialize( state );
+	filecheck::Deinitialize( state );
+	netfilter::Deinitialize( state );
+	global::Initialize( state );
 	return 0;
 }
