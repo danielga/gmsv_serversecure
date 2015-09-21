@@ -1,9 +1,7 @@
 #include <filecheck.hpp>
 #include <main.hpp>
 #include <cstdint>
-#include <algorithm>
 #include <string>
-#include <helpers.hpp>
 #include <symbolfinder.hpp>
 #include <detours.h>
 #include <convar.h>
@@ -11,8 +9,6 @@
 
 namespace filecheck
 {
-
-static std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
 #if defined _WIN32
 
@@ -127,7 +123,7 @@ void Initialize( lua_State *state )
 
 	SymbolFinder symfinder;
 	IsValidFileForTransfer = reinterpret_cast<IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
-		engine_lib.c_str( ),
+		global::engine_lib.c_str( ),
 		IsValidFileForTransfer_sig,
 		IsValidFileForTransfer_siglen
 	) );

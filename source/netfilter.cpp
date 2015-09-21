@@ -1,11 +1,11 @@
 #include <netfilter.hpp>
+#include <main.hpp>
 #include <cstdint>
 #include <unordered_set>
 #include <queue>
 #include <convar.h>
 #include <threadtools.h>
 #include <utlvector.h>
-#include <helpers.hpp>
 #include <symbolfinder.hpp>
 
 #if defined _WIN32
@@ -85,8 +85,6 @@ static size_t net_sockets_offset = 23;
 #endif
 
 static ConVar ss_show_oob( "ss_show_oob", "0", 0, "Display any OOB messages received" );
-
-static std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
 static Hook_recvfrom_t Hook_recvfrom = nullptr;
 static int32_t game_socket = -1;
@@ -353,7 +351,7 @@ void Initialize( lua_State *state )
 {
 	SymbolFinder symfinder;
 	uint8_t *net_sockets_pointer = reinterpret_cast<uint8_t *>( symfinder.ResolveOnBinary(
-		engine_lib.c_str( ),
+		global::engine_lib.c_str( ),
 		NET_ProcessListen_sig,
 		NET_ProcessListen_siglen
 	) );
@@ -400,10 +398,13 @@ void Initialize( lua_State *state )
 
 void Deinitialize( lua_State * )
 {
-	thread_execute = false;
-	ThreadJoin( thread_socket );
-	ReleaseThreadHandle( thread_socket );
-	thread_socket = nullptr;
+	if( thread_socket != nullptr )
+	{
+		thread_execute = false;
+		ThreadJoin( thread_socket );
+		ReleaseThreadHandle( thread_socket );
+		thread_socket = nullptr;
+	}
 
 	VCRHook_recvfrom = Hook_recvfrom;
 

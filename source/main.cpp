@@ -12,6 +12,7 @@ static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
 static SourceSDK::FactoryLoader engine_loader( "engine", false );
 
 INetworkStringTableContainer *networkstringtable = nullptr;
+std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
 static void Initialize( lua_State *state )
 {
