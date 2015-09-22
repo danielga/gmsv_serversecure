@@ -65,6 +65,6 @@ GMOD_MODULE_CLOSE( )
 {
 	filecheck::Deinitialize( state );
 	netfilter::Deinitialize( state );
-	global::Initialize( state );
+	global::Deinitialize( state );
 	return 0;
 }

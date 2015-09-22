@@ -86,7 +86,7 @@ static size_t net_sockets_offset = 23;
 
 static ConVar ss_show_oob( "ss_show_oob", "0", 0, "Display any OOB messages received" );
 
-static Hook_recvfrom_t Hook_recvfrom = nullptr;
+static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
 static int32_t game_socket = -1;
 
 static bool check_packets = false;
@@ -253,8 +253,6 @@ static uint32_t Hook_recvfrom_thread( void *param )
 	timeval ms100 = { 0, 100000 };
 	char tempbuf[65535] = { 0 };
 	fd_set readables;
-	FD_ZERO( &readables );
-	FD_SET( game_socket, &readables );
 
 	while( thread_execute )
 	{
@@ -264,7 +262,9 @@ static uint32_t Hook_recvfrom_thread( void *param )
 			continue;
 		}
 
-		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 )
+		FD_ZERO( &readables );
+		FD_SET( game_socket, &readables );
+		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 || !FD_ISSET( game_socket, &readables ) )
 			continue;
 
 		packet p;
@@ -374,8 +374,6 @@ void Initialize( lua_State *state )
 		LUA->ThrowError( "unable to create thread" );
 
 	g_pCVar->RegisterConCommand( &ss_show_oob );
-
-	Hook_recvfrom = VCRHook_recvfrom;
 
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );

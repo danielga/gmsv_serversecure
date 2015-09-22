@@ -12,8 +12,8 @@ namespace filecheck
 
 #if defined _WIN32
 
-static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\x57\x8B\x7D\x08\x85\xFF\x0F\x84";
-static size_t IsValidFileForTransfer_siglen = 17;
+static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x8B\x4D\x08\x85\xC9\x0F\x84\x2A\x2A\x2A\x2A\x80\x39";
+static size_t IsValidFileForTransfer_siglen = 16;
 
 #elif defined __linux
 
