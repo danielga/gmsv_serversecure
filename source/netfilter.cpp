@@ -46,7 +46,6 @@ struct packet_t
 {
 	uint32 channel;
 	uint8 type;
-	char *data;
 };
 
 struct packet
@@ -325,7 +324,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 
 			if( len >= 18 )
 			{
-				if( strncmp( p->data, "statusResponse", 14 ) == 0 )
+				if( strncmp( &data[5], "statusResponse", 14 ) == 0 )
 				{
 					DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
@@ -343,7 +342,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 
 		case 'T': // server info request
 		{
-			if( len == 25 && strncmp( p->data, "Source Engine Query", 19 ) == 0 )
+			if( len == 25 && strncmp( &data[5], "Source Engine Query", 19 ) == 0 )
 			{
 				if( !info_cache )
 					return true;
