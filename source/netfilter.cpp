@@ -81,7 +81,7 @@ static size_t NET_ProcessListen_siglen = 16;
 static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
 static const size_t IServer_siglen = 16;
 
-static uintptr_t getgamemode_offset = 12;
+static uintptr_t GetGamemode_offset = 12;
 
 static size_t net_sockets_offset = 18;
 
@@ -97,10 +97,12 @@ static size_t NET_ProcessListen_siglen = 0;
 
 static size_t net_sockets_offset = 36;
 
-static const char *IServer_sig = "@sv";
-static const size_t IServer_siglen = 0;
+/*static const char *IServer_sig = "@sv";
+static const size_t IServer_siglen = 0;*/
+static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
+static const size_t IServer_siglen = 16;
 
-static uintptr_t getgamemode_offset = 12;
+static uintptr_t GetGamemode_offset = 12;
 
 typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
@@ -117,14 +119,14 @@ static size_t net_sockets_offset = 23;
 static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x08\x89\x04\x24\xFF\x51\x28\xD9\x9D\x9C\xFE";
 static const size_t IServer_siglen = 16;
 
-static uintptr_t getgamemode_offset = 20;
+static uintptr_t GetGamemode_offset = 20;
 
 typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
 #endif
 
 static std::string dedicated_binary = helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
-static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/", false );
+static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
 
 static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
 static int32_t game_socket = -1;
@@ -195,7 +197,7 @@ static void BuildStaticReplyInfo( )
 	{
 		uintptr_t gms = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
 		GetGamemode_t getgm = *reinterpret_cast<GetGamemode_t *>(
-			*reinterpret_cast<uintptr_t *>( gms ) + getgamemode_offset
+			*reinterpret_cast<uintptr_t *>( gms ) + GetGamemode_offset
 		);
 		gamemode *gm = reinterpret_cast<gamemode *>( getgm( gms ) );
 
@@ -593,7 +595,7 @@ void Initialize( lua_State *state )
 
 	SymbolFinder symfinder;
 
-	CreateInterfaceFn factory = static_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
+	CreateInterfaceFn factory = reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
 		dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
 	) );
 	if( factory == nullptr )
