@@ -2,43 +2,25 @@
 #include <interfaces.hpp>
 #include <netfilter.hpp>
 #include <filecheck.hpp>
-#include <convar.h>
-#include <networkstringtabledefs.h>
 
 namespace global
 {
 
-static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
-static SourceSDK::FactoryLoader engine_loader( "engine", false );
-
-INetworkStringTableContainer *networkstringtable = nullptr;
+SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
 std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
 static void Initialize( lua_State *state )
 {
-	if( !icvar_loader.IsValid( ) )
-		LUA->ThrowError( "unable to get vstdlib factory" );
-
 	if( !engine_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get engine factory" );
 
-	g_pCVar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
-	if( g_pCVar == nullptr )
-		LUA->ThrowError( "unable to get ICvar" );
-
-	networkstringtable = engine_loader.GetInterface<INetworkStringTableContainer>(
-		INTERFACENAME_NETWORKSTRINGTABLESERVER
-	);
-	if( networkstringtable == nullptr )
-		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
-
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.0.0" );
+	LUA->PushString( "serversecure 1.0.1" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10000 );
+	LUA->PushNumber( 10001 );
 	LUA->SetField( -2, "VersionNum" );
 
 	LUA->Push( -1 );

@@ -4,8 +4,8 @@
 #include <string>
 #include <symbolfinder.hpp>
 #include <detours.h>
-#include <convar.h>
 #include <networkstringtabledefs.h>
+#include <strtools.h>
 
 namespace filecheck
 {
@@ -27,21 +27,18 @@ static size_t IsValidFileForTransfer_siglen = 0;
 
 #endif
 
-static ConVar ss_show_files( "ss_show_files", "0", 0, "Display file checks" );
-
 typedef bool( *IsValidFileForTransfer_t )( const char *file );
 
 static IsValidFileForTransfer_t IsValidFileForTransfer = nullptr;
 static MologieDetours::Detour<IsValidFileForTransfer_t> *IsValidFileForTransfer_detour = nullptr;
 
+static INetworkStringTableContainer *networkstringtable = nullptr;
 static INetworkStringTable *downloads = nullptr;
 static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
 
 inline bool BlockDownload( const char *filepath )
 {
-	if( ss_show_files.GetBool( ) )
-		Msg( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
-
+	DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 	return false;
 }
 
@@ -49,18 +46,14 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 {
 	if( filepath == nullptr )
 	{
-		if( ss_show_files.GetBool( ) )
-			Msg( "[ServerSecure] Invalid file to download (string pointer was NULL)\n" );
-
+		DebugWarning( "[ServerSecure] Invalid file to download (string pointer was NULL)\n" );
 		return false;
 	}
 
 	size_t len = strlen( filepath );
 	if( len == 0 )
 	{
-		if( ss_show_files.GetBool( ) )
-			Msg( "[ServerSecure] Invalid file to download (path length was 0)\n" );
-
+		DebugWarning( "[ServerSecure] Invalid file to download (path length was 0)\n" );
 		return false;
 	}
 
@@ -72,8 +65,7 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 	nicefile.resize( len );
 	filepath = nicefile.c_str( );
 
-	if( ss_show_files.GetBool( ) )
-		Msg( "[ServerSecure] Checking file \"%s\"\n", filepath );
+	DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
 
 	if( !IsValidFileForTransfer( filepath ) )
 		return BlockDownload( filepath );
@@ -117,7 +109,13 @@ LUA_FUNCTION_STATIC( EnableFileValidation )
 
 void Initialize( lua_State *state )
 {
-	downloads = global::networkstringtable->FindTable( "downloadables" );
+	networkstringtable = global::engine_loader.GetInterface<INetworkStringTableContainer>(
+		INTERFACENAME_NETWORKSTRINGTABLESERVER
+	);
+	if( networkstringtable == nullptr )
+		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
+
+	downloads = networkstringtable->FindTable( "downloadables" );
 	if( downloads == nullptr )
 		LUA->ThrowError( "missing \"downloadables\" string table" );
 
@@ -130,8 +128,6 @@ void Initialize( lua_State *state )
 	if( IsValidFileForTransfer == nullptr )
 		LUA->ThrowError( "unable to sigscan for CNetChan::IsValidFileForTransfer" );
 
-	g_pCVar->RegisterConCommand( &ss_show_files );
-
 	LUA->PushCFunction( EnableFileValidation );
 	LUA->SetField( -2, "EnableFileValidation" );
 }
@@ -143,8 +139,6 @@ void Deinitialize( lua_State * )
 		delete IsValidFileForTransfer_detour;
 		IsValidFileForTransfer_detour = nullptr;
 	}
-
-	g_pCVar->UnregisterConCommand( &ss_show_files );
 }
 
 }
