@@ -401,7 +401,6 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 		inet_ntoa( from.sin_addr )
 	);
 	return false;
-
 }
 
 inline bool IsAddressWhitelisted( const sockaddr_in &addr )
