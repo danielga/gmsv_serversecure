@@ -348,7 +348,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 				if( !info_cache )
 					return true;
 
-				if( time( nullptr ) - a2s_last_time > 5 )
+				if( time( nullptr ) - a2s_last_time >= info_cache_time )
 					BuildReplyInfo( );
 
 				sendto(
