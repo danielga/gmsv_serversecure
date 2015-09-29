@@ -289,11 +289,11 @@ static void BuildReplyInfo( )
 
 #elif defined __linux
 
-	reply_packet.WriteByte( 'l' );
+	info_cache_packet.WriteByte( 'l' );
 
 #elif defined __APPLE__
 
-	reply_packet.WriteByte( 'm' );
+	info_cache_packet.WriteByte( 'm' );
 
 #endif
 
