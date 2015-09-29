@@ -1,10 +1,10 @@
 #include <netfilter.hpp>
 #include <main.hpp>
 #include <cstdint>
+#include <set>
 #include <unordered_set>
 #include <queue>
 #include <string>
-#include <ctime>
 #include <eiface.h>
 #include <filesystem_stdio.h>
 #include <iserver.h>
@@ -15,6 +15,7 @@
 #include <steam/steam_gameserver.h>
 #include <interfaces.hpp>
 #include <symbolfinder.hpp>
+#include <game/server/iplayerinfo.h>
 
 #if defined _WIN32
 
@@ -44,13 +45,7 @@ typedef int32_t ( *Hook_recvfrom_t )(
 
 struct packet_t
 {
-	uint32 channel;
-	uint8 type;
-};
-
-struct packet
-{
-	packet( ) :
+	packet_t( ) :
 		address_size( sizeof( address ) )
 	{ }
 
@@ -67,81 +62,7 @@ struct netsocket_t
 	int32_t hTCP;
 };
 
-typedef CUtlVector<netsocket_t> netsockets_t;
-
-#if defined _WIN32
-
-static const char *FileSystemFactory_sym = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
-static const size_t FileSystemFactory_symlen = 14;
-
-static const char *NET_ProcessListen_sig = "\x55\x8b\xec\x83\xec\x34\x56\x57\x8b\x7d\x08\x8b\xf7\xc1\xe6\x04";
-static size_t NET_ProcessListen_siglen = 16;
-
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
-static const size_t IServer_siglen = 16;
-
-static uintptr_t GetGamemode_offset = 12;
-
-static size_t net_sockets_offset = 18;
-
-typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
-
-#elif defined __linux
-
-static const char *FileSystemFactory_sym = "@_Z17FileSystemFactoryPKcPi";
-static const size_t FileSystemFactory_symlen = 0;
-
-static const char *NET_ProcessListen_sig = "@_Z17NET_ProcessListeni";
-static size_t NET_ProcessListen_siglen = 0;
-
-static size_t net_sockets_offset = 36;
-
-/*static const char *IServer_sig = "@sv";
-static const size_t IServer_siglen = 0;*/
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
-static const size_t IServer_siglen = 16;
-
-static uintptr_t GetGamemode_offset = 12;
-
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
-
-#elif defined __APPLE__
-
-static const char *FileSystemFactory_sym = "@__Z17FileSystemFactoryPKcPi";
-static const size_t FileSystemFactory_symlen = 0;
-
-static const char *NET_ProcessListen_sig = "@__Z17NET_ProcessListeni";
-static size_t NET_ProcessListen_siglen = 0;
-
-static size_t net_sockets_offset = 23;
-
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x08\x89\x04\x24\xFF\x51\x28\xD9\x9D\x9C\xFE";
-static const size_t IServer_siglen = 16;
-
-static uintptr_t GetGamemode_offset = 20;
-
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
-
-#endif
-
-static std::string dedicated_binary = helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
-static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
-
-static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
-static int32_t game_socket = -1;
-
-static bool check_packets = false;
-static bool check_addresses = false;
-static std::unordered_set<uint32_t> filter;
-
-static ThreadHandle_t thread_socket = nullptr;
-static std::queue<packet> packet_queue;
-static bool threaded_socket = false;
-static bool thread_execute = true;
-
-static const char *default_game_version = "15.08.10";
-static uint8_t default_proto_version = 17;
-static struct
+struct reply_info_t
 {
 	char game_dir[256];
 	char game_desc[256];
@@ -153,20 +74,10 @@ static struct
 	int32_t udp_port;
 	bool vac_secure;
 	std::string tags;
-} reply_info;
-static char reply_buffer[1024] = { 0 };
-static bf_write reply_packet( reply_buffer, sizeof( reply_buffer ) );
-static time_t a2s_last_time = 0;
-static bool info_cache = false;
-static uint32_t info_cache_time = 5;
-
-static IVEngineServer *engine_server = nullptr;
-static IServer *server = nullptr;
-static IServerGameDLL *gamedll = nullptr;
-static IFileSystem *filesystem = nullptr;
+};
 
 // VS2015 compatible (possibly gcc compatible too)
-struct gamemode
+struct gamemode_t
 {
 	std::string name;
 	std::string path;
@@ -175,10 +86,127 @@ struct gamemode
 	std::string workshopid;
 };
 
-static void BuildStaticReplyInfo( )
+struct query_client_t
+{
+	bool operator<( const query_client_t &rhs ) const
+	{
+		return address < rhs.address;
+	}
+
+	bool operator==( const query_client_t &rhs ) const
+	{
+		return address == rhs.address;
+	}
+
+	uint32_t address;
+	uint32_t last_reset;
+	uint32_t count;
+};
+
+typedef CUtlVector<netsocket_t> netsockets_t;
+
+#if defined _WIN32
+
+static const char *FileSystemFactory_sym = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
+static const size_t FileSystemFactory_symlen = 14;
+
+static const char *NET_ProcessListen_sig = "\x55\x8B\xEC\x83\xEC\x34\x56\x57\x8B\x7D\x08\x8B\xF7\xC1\xE6\x04";
+static size_t NET_ProcessListen_siglen = 16;
+
+static const size_t net_sockets_offset = 18;
+
+static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
+static const size_t IServer_siglen = 16;
+
+static const uintptr_t GetGamemode_offset = 12;
+
+typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
+
+#elif defined __linux
+
+static const char *FileSystemFactory_sym = "@_Z17FileSystemFactoryPKcPi";
+static const size_t FileSystemFactory_symlen = 0;
+
+static const char *NET_ProcessListen_sig = "@_Z17NET_ProcessListeni";
+static const size_t NET_ProcessListen_siglen = 0;
+
+static const size_t net_sockets_offset = 36;
+
+/*static const char *IServer_sig = "@sv";
+static const size_t IServer_siglen = 0;*/
+static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
+static const size_t IServer_siglen = 16;
+
+static const uintptr_t GetGamemode_offset = 12;
+
+typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
+
+#elif defined __APPLE__
+
+static const char *FileSystemFactory_sym = "@__Z17FileSystemFactoryPKcPi";
+static const size_t FileSystemFactory_symlen = 0;
+
+static const char *NET_ProcessListen_sig = "@__Z17NET_ProcessListeni";
+static const size_t NET_ProcessListen_siglen = 0;
+
+static const size_t net_sockets_offset = 23;
+
+static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x08\x89\x04\x24\xFF\x51\x28\xD9\x9D\x9C\xFE";
+static const size_t IServer_siglen = 16;
+
+static const uintptr_t GetGamemode_offset = 20;
+
+typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
+
+#endif
+
+static std::string dedicated_binary = helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
+static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
+
+static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
+static int32_t game_socket = -1;
+
+static bool packet_validation_enabled = false;
+
+static bool firewall_enabled = false;
+static std::unordered_set<uint32_t> firewall_whitelist;
+
+static bool threaded_socket_enabled = false;
+static bool threaded_socket_execute = true;
+static ThreadHandle_t threaded_socket_handle = nullptr;
+static std::queue<packet_t> threaded_socket_queue;
+
+static const char *default_game_version = "15.08.10";
+static const uint8_t default_proto_version = 17;
+static bool info_cache_enabled = false;
+static reply_info_t reply_info;
+static char info_cache_buffer[1024] = { 0 };
+static bf_write info_cache_packet( info_cache_buffer, sizeof( info_cache_buffer ) );
+static uint32_t info_cache_last_update = 0;
+static uint32_t info_cache_time = 5;
+
+static const uint32_t query_limiter_max_clients = 4096;
+static const uint32_t query_limiter_prune_clients = query_limiter_max_clients * 2 / 3;
+static const uint32_t query_limiter_timeout_clients = 120;
+static bool query_limiter_enabled = false;
+static uint32_t query_limiter_global_count = 0;
+static uint32_t query_limiter_global_last_reset = 0;
+static std::set<query_client_t> query_limiter_clients;
+static uint32_t query_limiter_max_window = 60;
+static uint32_t query_limiter_max_sec = 1;
+static uint32_t query_limiter_global_max_sec = 50;
+
+static IServer *server = nullptr;
+static CGlobalVars *globalvars = nullptr;
+
+static void BuildStaticReplyInfo(
+	IServerGameDLL *gamedll,
+	IVEngineServer *engine_server,
+	IFileSystem *filesystem
+)
 {
 	strncpy( reply_info.game_desc, gamedll->GetGameDescription( ), sizeof( reply_info.game_desc ) );
-
+	
 	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
 	if( steamid != nullptr )
 		reply_info.steamid = steamid->ConvertToUint64( );
@@ -194,19 +222,19 @@ static void BuildStaticReplyInfo( )
 	reply_info.vac_secure = SteamGameServer_BSecure( );
 
 	{
-		uintptr_t gms = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
-		GetGamemode_t getgm = *reinterpret_cast<GetGamemode_t *>(
-			*reinterpret_cast<uintptr_t *>( gms ) + GetGamemode_offset
+		uintptr_t gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
+		GetGamemode_t GetGamemode = *reinterpret_cast<GetGamemode_t *>(
+			*reinterpret_cast<uintptr_t *>( gamemodes ) + GetGamemode_offset
 		);
-		gamemode *gm = reinterpret_cast<gamemode *>( getgm( gms ) );
+		gamemode_t *gamemode = reinterpret_cast<gamemode_t *>( GetGamemode( gamemodes ) );
 
 		reply_info.tags = " gm:";
-		reply_info.tags += gm->path;
+		reply_info.tags += gamemode->path;
 
-		if( !gm->workshopid.empty( ) )
+		if( !gamemode->workshopid.empty( ) )
 		{
 			reply_info.tags += " gmws:";
-			reply_info.tags += gm->workshopid;
+			reply_info.tags += gamemode->workshopid;
 		}
 	}
 
@@ -215,7 +243,7 @@ static void BuildStaticReplyInfo( )
 		if( file == nullptr )
 		{
 			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
-			Warning( "[ServerSecure] Error opening steam.inf\n" );
+			DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
 			return;
 		}
 
@@ -223,7 +251,7 @@ static void BuildStaticReplyInfo( )
 		if( filesystem->ReadLine( buff, sizeof( reply_info.game_version ), file ) == nullptr )
 		{
 			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
-			Warning( "[ServerSecure] Failed reading steam.inf\n" );
+			DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
 			filesystem->Close( file );
 			return;
 		}
@@ -240,24 +268,24 @@ static void BuildStaticReplyInfo( )
 
 static void BuildReplyInfo( )
 {
-	reply_packet.Reset( );
+	info_cache_packet.Reset( );
 
-	reply_packet.WriteLong( -1 );
-	reply_packet.WriteByte( 'I' );
-	reply_packet.WriteByte( default_proto_version );
-	reply_packet.WriteString( server->GetName( ) );
-	reply_packet.WriteString( server->GetMapName( ) );
-	reply_packet.WriteString( reply_info.game_dir );
-	reply_packet.WriteString( reply_info.game_desc );
-	reply_packet.WriteShort( reply_info.appid );
-	reply_packet.WriteByte( server->GetNumClients( ) );
-	reply_packet.WriteByte( reply_info.max_clients );
-	reply_packet.WriteByte( server->GetNumFakeClients( ) );
-	reply_packet.WriteByte( 'd' );
+	info_cache_packet.WriteLong( -1 );
+	info_cache_packet.WriteByte( 'I' );
+	info_cache_packet.WriteByte( default_proto_version );
+	info_cache_packet.WriteString( server->GetName( ) );
+	info_cache_packet.WriteString( server->GetMapName( ) );
+	info_cache_packet.WriteString( reply_info.game_dir );
+	info_cache_packet.WriteString( reply_info.game_desc );
+	info_cache_packet.WriteShort( reply_info.appid );
+	info_cache_packet.WriteByte( server->GetNumClients( ) );
+	info_cache_packet.WriteByte( reply_info.max_clients );
+	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
+	info_cache_packet.WriteByte( 'd' );
 
 #if defined _WIN32
 
-	reply_packet.WriteByte( 'w' );
+	info_cache_packet.WriteByte( 'w' );
 
 #elif defined __linux
 
@@ -269,25 +297,99 @@ static void BuildReplyInfo( )
 
 #endif
 
-	reply_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
-	reply_packet.WriteByte( reply_info.vac_secure );
-	reply_packet.WriteString( reply_info.game_version );
+	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
+	info_cache_packet.WriteByte( reply_info.vac_secure );
+	info_cache_packet.WriteString( reply_info.game_version );
 
 	if( reply_info.tags.empty( ) )
 	{
-		reply_packet.WriteByte( 0x80 | 0x10 );
-		reply_packet.WriteShort( reply_info.udp_port );
-		reply_packet.WriteLongLong( reply_info.steamid );
+		info_cache_packet.WriteByte( 0x80 | 0x10 );
+		info_cache_packet.WriteShort( reply_info.udp_port );
+		info_cache_packet.WriteLongLong( reply_info.steamid );
 	}
 	else
 	{
-		reply_packet.WriteByte( 0x80 | 0x20 | 0x10 );
-		reply_packet.WriteShort( reply_info.udp_port );
-		reply_packet.WriteLongLong( reply_info.steamid );
-		reply_packet.WriteString( reply_info.tags.c_str( ) );
+		info_cache_packet.WriteByte( 0x80 | 0x20 | 0x10 );
+		info_cache_packet.WriteShort( reply_info.udp_port );
+		info_cache_packet.WriteLongLong( reply_info.steamid );
+		info_cache_packet.WriteString( reply_info.tags.c_str( ) );
+	}
+}
+
+inline bool CheckIPRate( uint32_t address, uint32_t time )
+{
+	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
+	{
+		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
+		{
+			const query_client_t &client = *it;
+			if( client.last_reset - time >= query_limiter_timeout_clients && client.address != address )
+			{
+				query_limiter_clients.erase( it );
+
+				if( query_limiter_clients.size( ) <= query_limiter_prune_clients )
+					break;
+			}
+		}
 	}
 
-	a2s_last_time = time( nullptr );
+	query_client_t client = { address, time, 1 };
+	auto it = query_limiter_clients.find( client );
+	if( it != query_limiter_clients.end( ) )
+	{
+		client = *it;
+		query_limiter_clients.erase( it );
+
+		if( time - client.last_reset >= query_limiter_max_window )
+		{
+			client.last_reset = time;
+		}
+		else
+		{
+			++client.count;
+			if( client.count / query_limiter_max_window >= query_limiter_max_sec )
+			{
+				query_limiter_clients.insert( client );
+				return false;
+			}
+		}
+	}
+
+	query_limiter_clients.insert( client );
+
+	if( time - query_limiter_global_last_reset > query_limiter_max_window )
+	{
+		query_limiter_global_last_reset = time;
+		query_limiter_global_count = 1;
+	}
+	else
+	{
+		++query_limiter_global_count;
+		if( query_limiter_global_count / query_limiter_max_window >= query_limiter_global_max_sec )
+			return false;
+	}
+
+	return true;
+}
+
+inline bool SendInfoCache( const sockaddr_in &from, uint32_t time )
+{
+	if( time - info_cache_last_update >= info_cache_time )
+	{
+		BuildReplyInfo( );
+		info_cache_last_update = time;
+	}
+
+	sendto(
+		game_socket,
+		reinterpret_cast<char *>( info_cache_packet.GetData( ) ),
+		info_cache_packet.GetNumBytesWritten( ),
+		0,
+		reinterpret_cast<const sockaddr *>( &from ),
+		sizeof( from )
+	);
+
+	return false; // we've handled it
 }
 
 static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from )
@@ -298,14 +400,15 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 	if( len < 5 )
 		return true;
 
-	const packet_t *p = reinterpret_cast<const packet_t *>( data );
-	if( p->channel == -2 )
+	int32_t channel = *reinterpret_cast<const int32_t *>( data );
+	if( channel == -2 )
 		return false;
 
-	if( p->channel != -1 )
+	if( channel != -1 )
 		return true;
 
-	switch( p->type )
+	uint8_t type = *reinterpret_cast<const uint8_t *>( data + 4 );
+	switch( type )
 	{
 		case 'W': // server challenge request
 		case 's': // master server challenge
@@ -315,8 +418,8 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 				DebugWarning(
 					"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 					len,
-					p->channel,
-					p->type,
+					channel,
+					type,
 					inet_ntoa( from.sin_addr )
 				);
 				return false;
@@ -324,13 +427,13 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 
 			if( len >= 18 )
 			{
-				if( strncmp( &data[5], "statusResponse", 14 ) == 0 )
+				if( strncmp( data + 5, "statusResponse", 14 ) == 0 )
 				{
 					DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 						len,
-						p->channel,
-						p->type,
+						channel,
+						type,
 						inet_ntoa( from.sin_addr )
 					);
 					return false;
@@ -342,32 +445,22 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 
 		case 'T': // server info request
 		{
-			if( len == 25 && strncmp( &data[5], "Source Engine Query", 19 ) == 0 )
+			if( len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 )
 			{
-				if( !info_cache )
-					return true;
+				uint32_t time = static_cast<uint32_t>( globalvars->realtime );
+				if( query_limiter_enabled && !CheckIPRate( from.sin_addr.s_addr, time ) )
+					return false;
 
-				if( time( nullptr ) - a2s_last_time >= info_cache_time )
-					BuildReplyInfo( );
+				if( info_cache_enabled )
+					return SendInfoCache( from, time );
 
-				sendto(
-					game_socket,
-					reinterpret_cast<char *>( reply_packet.GetData( ) ),
-					reply_packet.GetNumBytesWritten( ),
-					0,
-					reinterpret_cast<const sockaddr *>( &from ),
-					sizeof( from )
-				);
+				return true; // the query is valid, continue
 			}
 
-			return false;
+			return false; // the query is invalid, stop processing
 		}
 
 		case 'U': // player info request
-		{
-			return len == 9;
-		}
-
 		case 'V': // rules request
 		{
 			return len == 9;
@@ -376,19 +469,13 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 		case 'q': // connection handshake init
 		case 'k': // steam auth packet
 		{
-
-#if defined _DEBUG
-
-			Msg(
+			DebugMsg(
 				"[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 				len,
-				p->channel,
-				p->type,
+				channel,
+				type,
 				inet_ntoa( from.sin_addr )
 			);
-
-#endif
-
 			return true;
 		}
 	}
@@ -396,8 +483,8 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 	DebugWarning(
 		"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 		len,
-		p->channel,
-		p->type,
+		channel,
+		type,
 		inet_ntoa( from.sin_addr )
 	);
 	return false;
@@ -405,7 +492,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 
 inline bool IsAddressWhitelisted( const sockaddr_in &addr )
 {
-	return filter.find( addr.sin_addr.s_addr ) != filter.end( );
+	return firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( );
 }
 
 inline int32_t SetNetError( )
@@ -424,6 +511,21 @@ inline int32_t SetNetError( )
 	return -1;
 }
 
+inline packet_t GetPacket( )
+{
+	bool full = threaded_socket_queue.size( ) >= 1000;
+
+	packet_t p = threaded_socket_queue.front( );
+	threaded_socket_queue.pop( );
+
+	if( full )
+	{
+		
+	}
+
+	return p;
+}
+
 static int32_t Hook_recvfrom_d(
 	int32_t s,
 	char *buf,
@@ -435,24 +537,22 @@ static int32_t Hook_recvfrom_d(
 {
 	sockaddr_in infrom = { 0 };
 	memcpy( &infrom, from, *fromlen > sizeof( infrom ) ? sizeof( infrom ) : *fromlen );
-	if( !threaded_socket && packet_queue.empty( ) )
+	if( !threaded_socket_enabled && threaded_socket_queue.empty( ) )
 	{
 		int32_t len = Hook_recvfrom( s, buf, buflen, flags, from, fromlen );
-		if( len == -1 || ( check_addresses && !IsAddressWhitelisted( infrom ) ) )
+		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( infrom ) ) )
 			return SetNetError( );
 
-		if( check_packets && !IsDataValid( buf, len, infrom ) )
+		if( packet_validation_enabled && !IsDataValid( buf, len, infrom ) )
 			return SetNetError( );
 
 		return len;
 	}
 
-	if( packet_queue.empty( ) )
+	if( threaded_socket_queue.empty( ) )
 		return SetNetError( );
 
-	packet p = packet_queue.front( );
-	packet_queue.pop( );
-
+	packet_t p = GetPacket( );
 	int32_t len = static_cast<int32_t>( p.buffer.size( ) );
 	if( len > buflen )
 		len = buflen;
@@ -474,9 +574,10 @@ static uint32_t Hook_recvfrom_thread( void *param )
 	char tempbuf[65535] = { 0 };
 	fd_set readables;
 
-	while( thread_execute )
+	while( threaded_socket_execute )
 	{
-		if( !threaded_socket )
+		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= 1000 ) // testing for maximum queue size
+		// this is a very cheap "fix", the socket itself has a queue too but will start dropping packets
 		{
 			ThreadSleep( 100 );
 			continue;
@@ -487,7 +588,7 @@ static uint32_t Hook_recvfrom_thread( void *param )
 		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 || !FD_ISSET( game_socket, &readables ) )
 			continue;
 
-		packet p;
+		packet_t p;
 		int32_t len = Hook_recvfrom(
 			game_socket,
 			tempbuf,
@@ -496,14 +597,14 @@ static uint32_t Hook_recvfrom_thread( void *param )
 			reinterpret_cast<sockaddr *>( &p.address ),
 			&p.address_size
 		);
-		if( len == -1 || ( check_addresses && !IsAddressWhitelisted( p.address ) ) )
+		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( p.address ) ) )
 			continue;
 
-		if( check_packets && !IsDataValid( tempbuf, len, p.address ) )
+		if( packet_validation_enabled && !IsDataValid( tempbuf, len, p.address ) )
 			continue;
 
 		p.buffer.assign( tempbuf, tempbuf + len );
-		packet_queue.push( p );
+		threaded_socket_queue.push( p );
 	}
 
 	return 0;
@@ -513,38 +614,59 @@ inline void SetDetourStatus( bool enabled )
 {
 	if( enabled )
 		VCRHook_recvfrom = Hook_recvfrom_d;
-	else if( !check_addresses && !check_packets && !threaded_socket )
+	else if( !firewall_enabled && !packet_validation_enabled && !threaded_socket_enabled )
 		VCRHook_recvfrom = Hook_recvfrom;
 }
 
 LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	check_addresses = LUA->GetBool( 1 );
-	SetDetourStatus( check_addresses );
+	firewall_enabled = LUA->GetBool( 1 );
+	SetDetourStatus( firewall_enabled );
+	return 0;
+}
+
+// Whitelisted IPs bytes need to be in network order (big endian)
+LUA_FUNCTION_STATIC( WhitelistIP )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	firewall_whitelist.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( RemoveIP )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	firewall_whitelist.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( WhitelistReset )
+{
+	std::unordered_set<uint32_t>( ).swap( firewall_whitelist );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( EnablePacketValidation )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	check_packets = LUA->GetBool( 1 );
-	SetDetourStatus( check_packets );
+	packet_validation_enabled = LUA->GetBool( 1 );
+	SetDetourStatus( packet_validation_enabled );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( EnableThreadedSocket )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	threaded_socket = LUA->GetBool( 1 );
-	SetDetourStatus( threaded_socket );
+	threaded_socket_enabled = LUA->GetBool( 1 );
+	SetDetourStatus( threaded_socket_enabled );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( EnableInfoCache )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	info_cache = LUA->GetBool( 1 );
+	info_cache_enabled = LUA->GetBool( 1 );
 	return 0;
 }
 
@@ -555,24 +677,31 @@ LUA_FUNCTION_STATIC( SetInfoCacheTime )
 	return 0;
 }
 
-// Whitelisted IPs bytes need to be in network order (big endian)
-LUA_FUNCTION_STATIC( WhitelistIP )
+LUA_FUNCTION_STATIC( EnableQueryLimiter )
 {
-	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	filter.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+	query_limiter_enabled = LUA->GetBool( 1 );
 	return 0;
 }
 
-LUA_FUNCTION_STATIC( RemoveIP )
+LUA_FUNCTION_STATIC( SetMaxQueriesWindow )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	filter.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	query_limiter_max_window = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
 	return 0;
 }
 
-LUA_FUNCTION_STATIC( WhitelistReset )
+LUA_FUNCTION_STATIC( SetMaxQueriesPerSecond )
 {
-	std::unordered_set<uint32_t>( ).swap( filter );
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	query_limiter_max_sec = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	query_limiter_global_max_sec = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
 	return 0;
 }
 
@@ -581,15 +710,25 @@ void Initialize( lua_State *state )
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
 
-	engine_server = global::engine_loader.GetInterface<IVEngineServer>(
+	IServerGameDLL *gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
+	if( gamedll == nullptr )
+		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
+
+	IVEngineServer *engine_server = global::engine_loader.GetInterface<IVEngineServer>(
 		INTERFACEVERSION_VENGINESERVER_VERSION_21
 	);
 	if( engine_server == nullptr )
 		LUA->ThrowError( "failed to load required IVEngineServer interface" );
 
-	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
-	if( gamedll == nullptr )
-		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
+	IPlayerInfoManager *playerinfo = server_loader.GetInterface<IPlayerInfoManager>(
+		INTERFACEVERSION_PLAYERINFOMANAGER
+	);
+	if( playerinfo == nullptr )
+		LUA->ThrowError( "failed to load required IPlayerInfoManager interface" );
+
+	globalvars = playerinfo->GetGlobalVars( );
+	if( globalvars == nullptr )
+		LUA->ThrowError( "failed to load required CGlobalVars interface" );
 
 	SymbolFinder symfinder;
 
@@ -599,7 +738,10 @@ void Initialize( lua_State *state )
 	if( factory == nullptr )
 		LUA->ThrowError( "unable to retrieve dedicated factory" );
 
-	filesystem = static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
+	IFileSystem *filesystem = static_cast<IFileSystem *>( factory(
+		FILESYSTEM_INTERFACE_VERSION,
+		nullptr
+	) );
 	if( filesystem == nullptr )
 		LUA->ThrowError( "failed to initialize IFileSystem" );
 
@@ -633,15 +775,24 @@ void Initialize( lua_State *state )
 	if( game_socket == -1 )
 		LUA->ThrowError( "got an invalid server socket" );
 
-	thread_execute = true;
-	thread_socket = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
-	if( thread_socket == nullptr )
+	threaded_socket_execute = true;
+	threaded_socket_handle = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
+	if( threaded_socket_handle == nullptr )
 		LUA->ThrowError( "unable to create thread" );
 
-	BuildStaticReplyInfo( );
+	BuildStaticReplyInfo( gamedll, engine_server, filesystem );
 
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
+
+	LUA->PushCFunction( WhitelistIP );
+	LUA->SetField( -2, "WhitelistIP" );
+
+	LUA->PushCFunction( RemoveIP );
+	LUA->SetField( -2, "RemoveIP" );
+
+	LUA->PushCFunction( WhitelistReset );
+	LUA->SetField( -2, "WhitelistReset" );
 
 	LUA->PushCFunction( EnablePacketValidation );
 	LUA->SetField( -2, "EnablePacketValidation" );
@@ -655,24 +806,27 @@ void Initialize( lua_State *state )
 	LUA->PushCFunction( SetInfoCacheTime );
 	LUA->SetField( -2, "SetInfoCacheTime" );
 
-	LUA->PushCFunction( WhitelistIP );
-	LUA->SetField( -2, "WhitelistIP" );
+	LUA->PushCFunction( EnableQueryLimiter );
+	LUA->SetField( -2, "EnableQueryLimiter" );
 
-	LUA->PushCFunction( RemoveIP );
-	LUA->SetField( -2, "RemoveIP" );
+	LUA->PushCFunction( SetMaxQueriesWindow );
+	LUA->SetField( -2, "SetMaxQueriesWindow" );
 
-	LUA->PushCFunction( WhitelistReset );
-	LUA->SetField( -2, "WhitelistReset" );
+	LUA->PushCFunction( SetMaxQueriesPerSecond );
+	LUA->SetField( -2, "SetMaxQueriesPerSecond" );
+
+	LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
+	LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
 }
 
 void Deinitialize( lua_State * )
 {
-	if( thread_socket != nullptr )
+	if( threaded_socket_handle != nullptr )
 	{
-		thread_execute = false;
-		ThreadJoin( thread_socket );
-		ReleaseThreadHandle( thread_socket );
-		thread_socket = nullptr;
+		threaded_socket_execute = false;
+		ThreadJoin( threaded_socket_handle );
+		ReleaseThreadHandle( threaded_socket_handle );
+		threaded_socket_handle = nullptr;
 	}
 
 	VCRHook_recvfrom = Hook_recvfrom;

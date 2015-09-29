@@ -32,7 +32,6 @@ typedef bool( *IsValidFileForTransfer_t )( const char *file );
 static IsValidFileForTransfer_t IsValidFileForTransfer = nullptr;
 static MologieDetours::Detour<IsValidFileForTransfer_t> *IsValidFileForTransfer_detour = nullptr;
 
-static INetworkStringTableContainer *networkstringtable = nullptr;
 static INetworkStringTable *downloads = nullptr;
 static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
 
@@ -109,7 +108,7 @@ LUA_FUNCTION_STATIC( EnableFileValidation )
 
 void Initialize( lua_State *state )
 {
-	networkstringtable = global::engine_loader.GetInterface<INetworkStringTableContainer>(
+	INetworkStringTableContainer *networkstringtable = global::engine_loader.GetInterface<INetworkStringTableContainer>(
 		INTERFACENAME_NETWORKSTRINGTABLESERVER
 	);
 	if( networkstringtable == nullptr )
