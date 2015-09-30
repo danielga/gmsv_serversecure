@@ -64,9 +64,9 @@ struct netsocket_t
 
 struct reply_info_t
 {
-	char game_dir[256];
-	char game_desc[256];
-	char game_version[256];
+	std::string game_dir;
+	std::string game_desc;
+	std::string game_version;
 	int32_t appid;
 	int32_t max_clients;
 	int32_t proto_version;
@@ -210,7 +210,7 @@ static void BuildStaticReplyInfo(
 	IFileSystem *filesystem
 )
 {
-	strncpy( reply_info.game_desc, gamedll->GetGameDescription( ), sizeof( reply_info.game_desc ) );
+	reply_info.game_desc = gamedll->GetGameDescription( );
 
 	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
 	if( steamid != nullptr )
@@ -233,6 +233,10 @@ static void BuildStaticReplyInfo(
 		);
 		gamemode_t *gamemode = reinterpret_cast<gamemode_t *>( GetGamemode( gamemodes ) );
 
+		// apparently some servers have GetGameDescription returning garbage?
+		if( reply_info.game_desc.empty( ) )
+			reply_info.game_desc = gamemode->name;
+
 		reply_info.tags = " gm:";
 		reply_info.tags += gamemode->path;
 
@@ -247,27 +251,26 @@ static void BuildStaticReplyInfo(
 		FileHandle_t file = filesystem->Open( "steam.inf", "r", "GAME" );
 		if( file == nullptr )
 		{
-			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
+			reply_info.game_version = default_game_version;
 			DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
 			return;
 		}
 
-		char buff[sizeof( reply_info.game_version )] = { 0 };
-		if( filesystem->ReadLine( buff, sizeof( reply_info.game_version ), file ) == nullptr )
+		char buff[256] = { 0 };
+		bool failed = filesystem->ReadLine( buff, sizeof( buff ), file ) == nullptr;
+		filesystem->Close( file );
+		if( failed )
 		{
-			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
+			reply_info.game_version = default_game_version;
 			DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
-			filesystem->Close( file );
 			return;
 		}
 
-		filesystem->Close( file );
+		reply_info.game_version = &buff[13];
 
-		size_t len = strlen( buff );
-		if( buff[len - 1] == '\n' )
-			buff[len - 1] = '\0';
-
-		strncpy( reply_info.game_version, &buff[13], sizeof( reply_info.game_version ) );
+		size_t pos = reply_info.game_version.find_first_of( "\r\n" );
+		if( pos != reply_info.game_version.npos )
+			reply_info.game_version.erase( pos );
 	}
 }
 
@@ -280,8 +283,8 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( default_proto_version );
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
-	info_cache_packet.WriteString( reply_info.game_dir );
-	info_cache_packet.WriteString( reply_info.game_desc );
+	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
+	info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
 	info_cache_packet.WriteShort( reply_info.appid );
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
 	info_cache_packet.WriteByte( reply_info.max_clients );
@@ -290,7 +293,7 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( operating_system_char );
 	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
 	info_cache_packet.WriteByte( reply_info.vac_secure );
-	info_cache_packet.WriteString( reply_info.game_version );
+	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
 	if( reply_info.tags.empty( ) )
 	{
@@ -312,14 +315,14 @@ static void BuildReplyInfo( )
 	}
 }
 
-inline bool CheckIPRate( uint32_t address, uint32_t time )
+inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 {
 	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
 	{
 		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
 		{
 			const query_client_t &client = *it;
-			if( client.last_reset - time >= query_limiter_timeout_clients && client.address != address )
+			if( client.last_reset - time >= query_limiter_timeout_clients && client.address != from.sin_addr.s_addr )
 			{
 				query_limiter_clients.erase( it );
 
@@ -329,7 +332,7 @@ inline bool CheckIPRate( uint32_t address, uint32_t time )
 		}
 	}
 
-	query_client_t client = { address, time, 1 };
+	query_client_t client = { from.sin_addr.s_addr, time, 1 };
 	auto it = query_limiter_clients.find( client );
 	if( it != query_limiter_clients.end( ) )
 	{
@@ -346,6 +349,10 @@ inline bool CheckIPRate( uint32_t address, uint32_t time )
 			if( client.count / query_limiter_max_window >= query_limiter_max_sec )
 			{
 				query_limiter_clients.insert( client );
+				DebugWarning(
+					"[ServerSecure] %s reached its query limit!\n",
+					inet_ntoa( from.sin_addr )
+				);
 				return false;
 			}
 		}
@@ -362,7 +369,13 @@ inline bool CheckIPRate( uint32_t address, uint32_t time )
 	{
 		++query_limiter_global_count;
 		if( query_limiter_global_count / query_limiter_max_window >= query_limiter_global_max_sec )
+		{
+			DebugWarning(
+				"[ServerSecure] %s reached the global query limit!\n",
+				inet_ntoa( from.sin_addr )
+			);
 			return false;
+		}
 	}
 
 	return true;
@@ -391,14 +404,29 @@ inline bool SendInfoCache( const sockaddr_in &from, uint32_t time )
 static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from )
 {
 	if( len == 0 )
+	{
+		DebugWarning(
+			"[ServerSecure] Bad OOB! len: %d from %s\n",
+			len,
+			inet_ntoa( from.sin_addr )
+		);
 		return false;
+	}
 
 	if( len < 5 )
 		return true;
 
 	int32_t channel = *reinterpret_cast<const int32_t *>( data );
 	if( channel == -2 )
+	{
+		DebugWarning(
+			"[ServerSecure] Bad OOB! len: %d, channel: 0x%X from %s\n",
+			len,
+			channel,
+			inet_ntoa( from.sin_addr )
+		);
 		return false;
+	}
 
 	if( channel != -1 )
 		return true;
@@ -444,7 +472,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 			if( len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 )
 			{
 				uint32_t time = static_cast<uint32_t>( globalvars->realtime );
-				if( query_limiter_enabled && !CheckIPRate( from.sin_addr.s_addr, time ) )
+				if( query_limiter_enabled && !CheckIPRate( from, time ) )
 					return false;
 
 				if( info_cache_enabled )
@@ -459,7 +487,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 		case 'U': // player info request
 		case 'V': // rules request
 		{
-			return len == 9;
+			return len == 10;
 		}
 
 		case 'q': // connection handshake init

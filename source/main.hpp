@@ -2,12 +2,15 @@
 
 #include <string>
 #include <interfaces.hpp>
-#include <dbg.h>
 
 #if defined DEBUG
 
+#include <dbg.h>
+#include <color.h>
+
+static Color __yellow( 255, 255, 0, 255 );
 #define DebugMsg( ... ) Msg( __VA_ARGS__ )
-#define DebugWarning( ... ) Warning( __VA_ARGS__ )
+#define DebugWarning( ... ) ConColorMsg( 1, __yellow, __VA_ARGS__ )
 
 #else
 
