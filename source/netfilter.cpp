@@ -107,6 +107,8 @@ typedef CUtlVector<netsocket_t> netsockets_t;
 
 #if defined _WIN32
 
+typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
+
 static const char *FileSystemFactory_sym = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
 static const size_t FileSystemFactory_symlen = 14;
 
@@ -120,9 +122,11 @@ static const size_t IServer_siglen = 16;
 
 static const uintptr_t GetGamemode_offset = 12;
 
-typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
+static const char operating_system_char = 'w';
 
 #elif defined __linux
+
+typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
 static const char *FileSystemFactory_sym = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
@@ -132,16 +136,16 @@ static const size_t NET_ProcessListen_siglen = 0;
 
 static const size_t net_sockets_offset = 36;
 
-/*static const char *IServer_sig = "@sv";
-static const size_t IServer_siglen = 0;*/
 static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
 static const size_t IServer_siglen = 16;
 
 static const uintptr_t GetGamemode_offset = 12;
 
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
+static const char operating_system_char = 'l';
 
 #elif defined __APPLE__
+
+typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
 static const char *FileSystemFactory_sym = "@__Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
@@ -156,7 +160,7 @@ static const size_t IServer_siglen = 16;
 
 static const uintptr_t GetGamemode_offset = 20;
 
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
+static const char operating_system_char = 'm';
 
 #endif
 
@@ -171,6 +175,7 @@ static bool packet_validation_enabled = false;
 static bool firewall_enabled = false;
 static std::unordered_set<uint32_t> firewall_whitelist;
 
+static const size_t thread_socket_max_queue = 1000;
 static bool threaded_socket_enabled = false;
 static bool threaded_socket_execute = true;
 static ThreadHandle_t threaded_socket_handle = nullptr;
@@ -206,7 +211,7 @@ static void BuildStaticReplyInfo(
 )
 {
 	strncpy( reply_info.game_desc, gamedll->GetGameDescription( ), sizeof( reply_info.game_desc ) );
-	
+
 	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
 	if( steamid != nullptr )
 		reply_info.steamid = steamid->ConvertToUint64( );
@@ -270,8 +275,8 @@ static void BuildReplyInfo( )
 {
 	info_cache_packet.Reset( );
 
-	info_cache_packet.WriteLong( -1 );
-	info_cache_packet.WriteByte( 'I' );
+	info_cache_packet.WriteLong( -1 ); // connectionless packet header
+	info_cache_packet.WriteByte( 'I' ); // packet type is always 'I'
 	info_cache_packet.WriteByte( default_proto_version );
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
@@ -281,35 +286,26 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
 	info_cache_packet.WriteByte( reply_info.max_clients );
 	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
-	info_cache_packet.WriteByte( 'd' );
-
-#if defined _WIN32
-
-	info_cache_packet.WriteByte( 'w' );
-
-#elif defined __linux
-
-	info_cache_packet.WriteByte( 'l' );
-
-#elif defined __APPLE__
-
-	info_cache_packet.WriteByte( 'm' );
-
-#endif
-
+	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
+	info_cache_packet.WriteByte( operating_system_char );
 	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
 	info_cache_packet.WriteByte( reply_info.vac_secure );
 	info_cache_packet.WriteString( reply_info.game_version );
 
 	if( reply_info.tags.empty( ) )
 	{
+		// 0x80 - port number is present
+		// 0x10 - server steamid is present
 		info_cache_packet.WriteByte( 0x80 | 0x10 );
 		info_cache_packet.WriteShort( reply_info.udp_port );
 		info_cache_packet.WriteLongLong( reply_info.steamid );
 	}
 	else
 	{
-		info_cache_packet.WriteByte( 0x80 | 0x20 | 0x10 );
+		// 0x80 - port number is present
+		// 0x10 - server steamid is present
+		// 0x20 - tags are present
+		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x20 );
 		info_cache_packet.WriteShort( reply_info.udp_port );
 		info_cache_packet.WriteLongLong( reply_info.steamid );
 		info_cache_packet.WriteString( reply_info.tags.c_str( ) );
@@ -513,16 +509,11 @@ inline int32_t SetNetError( )
 
 inline packet_t GetPacket( )
 {
-	bool full = threaded_socket_queue.size( ) >= 1000;
-
+	//bool full = threaded_socket_queue.size( ) >= thread_socket_max_queue;
 	packet_t p = threaded_socket_queue.front( );
 	threaded_socket_queue.pop( );
-
-	if( full )
-	{
-		
-	}
-
+	// maybe have an algorithm for when the queue is full
+	// drop certain packet types like queries
 	return p;
 }
 
@@ -576,8 +567,9 @@ static uint32_t Hook_recvfrom_thread( void *param )
 
 	while( threaded_socket_execute )
 	{
-		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= 1000 ) // testing for maximum queue size
-		// this is a very cheap "fix", the socket itself has a queue too but will start dropping packets
+		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= thread_socket_max_queue )
+		// testing for maximum queue size, this is a very cheap "fix"
+		// the socket itself has a queue too but will start dropping packets when full
 		{
 			ThreadSleep( 100 );
 			continue;
