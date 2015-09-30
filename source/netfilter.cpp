@@ -488,7 +488,7 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 		case 'U': // player info request
 		case 'V': // rules request
 		{
-			return len == 10;
+			return len == 9;
 		}
 
 		case 'q': // connection handshake init
