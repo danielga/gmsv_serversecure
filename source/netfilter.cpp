@@ -6,7 +6,7 @@
 #include <queue>
 #include <string>
 #include <eiface.h>
-#include <filesystem_stdio.h>
+#include <filesystem.h>
 #include <iserver.h>
 #include <threadtools.h>
 #include <utlvector.h>
@@ -74,16 +74,6 @@ struct reply_info_t
 	int32_t udp_port;
 	bool vac_secure;
 	std::string tags;
-};
-
-// VS2015 compatible (possibly gcc compatible too)
-struct gamemode_t
-{
-	std::string name;
-	std::string path;
-	std::string filters;
-	std::string base;
-	std::string workshopid;
 };
 
 struct query_client_t
@@ -205,11 +195,59 @@ static IServer *server = nullptr;
 static CGlobalVars *globalvars = nullptr;
 
 static void BuildStaticReplyInfo(
+	lua_State *state,
 	IServerGameDLL *gamedll,
 	IVEngineServer *engine_server,
 	IFileSystem *filesystem
 )
 {
+	{
+		FileHandle_t file = filesystem->Open( "steam.inf", "r", "GAME" );
+		if( file == nullptr )
+			LUA->ThrowError( "error opening steam.inf" );
+
+		char buff[sizeof( reply_info.game_version )] = { 0 };
+		if( filesystem->ReadLine( buff, sizeof( reply_info.game_version ), file ) == nullptr )
+		{
+			filesystem->Close( file );
+			LUA->ThrowError( "failed reading steam.inf" );
+		}
+
+		filesystem->Close( file );
+
+		size_t len = strlen( buff );
+		if( buff[len - 1] == '\n' )
+			buff[len - 1] = '\0';
+
+		strncpy( reply_info.game_version, &buff[13], sizeof( reply_info.game_version ) );
+	}
+
+	// I don't like this but it's more reliable and won't give us random characters on random servers
+	{
+		LUA->GetField( GarrysMod::Lua::INDEX_GLOBAL, "engine" );
+		LUA->GetField( -1, "GetGamemodes" );
+		LUA->Call( 0, 1 );
+
+		LUA->PushNumber( LUA->ObjLen( -1 ) );
+		LUA->GetTable( -2 );
+
+		LUA->GetField( -1, "name" );
+		if( LUA->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+		{
+			reply_info.tags = " gm:";
+			reply_info.tags += LUA->GetString( -1 );
+		}
+
+		LUA->GetField( -2, "workshopid" );
+		if( LUA->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+		{
+			reply_info.tags += " gmws:";
+			reply_info.tags += LUA->GetString( -1 );
+		}
+
+		LUA->Pop( 5 );
+	}
+
 	strncpy( reply_info.game_desc, gamedll->GetGameDescription( ), sizeof( reply_info.game_desc ) );
 
 	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
@@ -225,50 +263,6 @@ static void BuildStaticReplyInfo(
 	reply_info.udp_port = server->GetUDPPort( );
 
 	reply_info.vac_secure = SteamGameServer_BSecure( );
-
-	{
-		uintptr_t gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
-		GetGamemode_t GetGamemode = *reinterpret_cast<GetGamemode_t *>(
-			*reinterpret_cast<uintptr_t *>( gamemodes ) + GetGamemode_offset
-		);
-		gamemode_t *gamemode = reinterpret_cast<gamemode_t *>( GetGamemode( gamemodes ) );
-
-		reply_info.tags = " gm:";
-		reply_info.tags += gamemode->path;
-
-		if( !gamemode->workshopid.empty( ) )
-		{
-			reply_info.tags += " gmws:";
-			reply_info.tags += gamemode->workshopid;
-		}
-	}
-
-	{
-		FileHandle_t file = filesystem->Open( "steam.inf", "r", "GAME" );
-		if( file == nullptr )
-		{
-			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
-			DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
-			return;
-		}
-
-		char buff[sizeof( reply_info.game_version )] = { 0 };
-		if( filesystem->ReadLine( buff, sizeof( reply_info.game_version ), file ) == nullptr )
-		{
-			strncpy( reply_info.game_version, default_game_version, sizeof( reply_info.game_version ) );
-			DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
-			filesystem->Close( file );
-			return;
-		}
-
-		filesystem->Close( file );
-
-		size_t len = strlen( buff );
-		if( buff[len - 1] == '\n' )
-			buff[len - 1] = '\0';
-
-		strncpy( reply_info.game_version, &buff[13], sizeof( reply_info.game_version ) );
-	}
 }
 
 static void BuildReplyInfo( )
@@ -767,12 +761,12 @@ void Initialize( lua_State *state )
 	if( game_socket == -1 )
 		LUA->ThrowError( "got an invalid server socket" );
 
+	BuildStaticReplyInfo( state, gamedll, engine_server, filesystem );
+
 	threaded_socket_execute = true;
 	threaded_socket_handle = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
 	if( threaded_socket_handle == nullptr )
 		LUA->ThrowError( "unable to create thread" );
-
-	BuildStaticReplyInfo( gamedll, engine_server, filesystem );
 
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );

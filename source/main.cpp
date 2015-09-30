@@ -9,21 +9,23 @@ namespace global
 SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
 std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 
-static void Initialize( lua_State *state )
+static void PreInitialize( lua_State *state )
 {
 	if( !engine_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get engine factory" );
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.1.0" );
+	LUA->PushString( "serversecure 1.1.1" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10100 );
+	LUA->PushNumber( 10101 );
 	LUA->SetField( -2, "VersionNum" );
+}
 
-	LUA->Push( -1 );
+static void Initialize( lua_State *state )
+{
 	LUA->SetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
 }
 
@@ -37,9 +39,10 @@ static void Deinitialize( lua_State *state )
 
 GMOD_MODULE_OPEN( )
 {
-	global::Initialize( state );
+	global::PreInitialize( state );
 	netfilter::Initialize( state );
 	filecheck::Initialize( state );
+	global::Initialize( state );
 	return 1;
 }
 
