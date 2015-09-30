@@ -6,7 +6,7 @@
 #if defined DEBUG
 
 #include <dbg.h>
-#include <color.h>
+#include <Color.h>
 
 static Color __yellow( 255, 255, 0, 255 );
 #define DebugMsg( ... ) Msg( __VA_ARGS__ )
