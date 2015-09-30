@@ -72,7 +72,6 @@ struct reply_info_t
 	int32_t proto_version;
 	uint64_t steamid;
 	int32_t udp_port;
-	bool vac_secure;
 	std::string tags;
 };
 
@@ -224,8 +223,6 @@ static void BuildStaticReplyInfo(
 
 	reply_info.udp_port = server->GetUDPPort( );
 
-	reply_info.vac_secure = SteamGameServer_BSecure( );
-
 	{
 		uintptr_t gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
 		GetGamemode_t GetGamemode = *reinterpret_cast<GetGamemode_t *>(
@@ -274,6 +271,9 @@ static void BuildStaticReplyInfo(
 	}
 }
 
+// maybe divide into low priority and high priority data?
+// low priority would be VAC protection status for example
+// updated on a much bigger period
 static void BuildReplyInfo( )
 {
 	info_cache_packet.Reset( );
@@ -292,7 +292,8 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 	info_cache_packet.WriteByte( operating_system_char );
 	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
-	info_cache_packet.WriteByte( reply_info.vac_secure );
+	// if vac protected, it activates itself some time after startup
+	info_cache_packet.WriteByte( SteamGameServer_BSecure( ) );
 	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
 	if( reply_info.tags.empty( ) )
