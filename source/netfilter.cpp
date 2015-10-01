@@ -76,6 +76,13 @@ struct reply_info_t
 // VS2015 compatible (possibly gcc compatible too)
 struct gamemode_t
 {
+
+#if defined __linux
+
+	std::string __unk;
+
+#endif
+
 	std::string name;
 	std::string path;
 	std::string filters;
