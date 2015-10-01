@@ -1,5 +1,7 @@
 #include <netfilter.hpp>
 #include <main.hpp>
+#include <GarrysMod/Lua/LuaInterface.h>
+#include <GarrysMod/Lua/AutoLock.h>
 #include <cstdint>
 #include <set>
 #include <unordered_set>
@@ -65,7 +67,6 @@ struct netsocket_t
 struct reply_info_t
 {
 	std::string game_dir;
-	std::string game_desc;
 	std::string game_version;
 	int32_t appid;
 	int32_t max_clients;
@@ -100,6 +101,13 @@ struct query_client_t
 	uint32_t address;
 	uint32_t last_reset;
 	uint32_t count;
+};
+
+enum class PacketType
+{
+	Invalid = -1,
+	Good,
+	Info
 };
 
 typedef CUtlVector<netsocket_t> netsockets_t;
@@ -202,15 +210,13 @@ static uint32_t query_limiter_global_max_sec = 50;
 
 static IServer *server = nullptr;
 static CGlobalVars *globalvars = nullptr;
+static IServerGameDLL *gamedll = nullptr;
+static IVEngineServer *engine_server = nullptr;
+static IFileSystem *filesystem = nullptr;
+static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
-static void BuildStaticReplyInfo(
-	IServerGameDLL *gamedll,
-	IVEngineServer *engine_server,
-	IFileSystem *filesystem
-)
+static void BuildStaticReplyInfo( )
 {
-	reply_info.game_desc = gamedll->GetGameDescription( );
-
 	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
 	if( steamid != nullptr )
 		reply_info.steamid = steamid->ConvertToUint64( );
@@ -229,10 +235,6 @@ static void BuildStaticReplyInfo(
 			*reinterpret_cast<uintptr_t *>( gamemodes ) + GetGamemode_offset
 		);
 		gamemode_t *gamemode = reinterpret_cast<gamemode_t *>( GetGamemode( gamemodes ) );
-
-		// apparently some servers have GetGameDescription returning garbage?
-		if( reply_info.game_desc.empty( ) )
-			reply_info.game_desc = gamemode->name;
 
 		reply_info.tags = " gm:";
 		reply_info.tags += gamemode->path;
@@ -271,6 +273,36 @@ static void BuildStaticReplyInfo(
 	}
 }
 
+inline std::string GetGameDescription( )
+{
+	GarrysMod::Lua::AutoLock lua_locker( lua );
+
+	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->Pop( 1 );
+		return "";
+	}
+
+	lua->GetField( -1, "Run" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	lua->PushString( "GetGameDescription" );
+	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	std::string gamedesc = lua->GetString( -1 );
+	lua->Pop( 2 );
+	return gamedesc;
+}
+
 // maybe divide into low priority and high priority data?
 // low priority would be VAC protection status for example
 // updated on a much bigger period
@@ -284,7 +316,8 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
 	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
-	info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
+	std::string gamedesc = GetGameDescription( );
+	info_cache_packet.WriteString( gamedesc.c_str( ) );
 	info_cache_packet.WriteShort( reply_info.appid );
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
 	info_cache_packet.WriteByte( reply_info.max_clients );
@@ -382,7 +415,7 @@ inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 	return true;
 }
 
-inline bool SendInfoCache( const sockaddr_in &from, uint32_t time )
+inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 {
 	if( time - info_cache_last_update >= info_cache_time )
 	{
@@ -399,10 +432,22 @@ inline bool SendInfoCache( const sockaddr_in &from, uint32_t time )
 		sizeof( from )
 	);
 
-	return false; // we've handled it
+	return PacketType::Invalid; // we've handled it
 }
 
-static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from )
+static PacketType HandleInfoQuery( const sockaddr_in &from )
+{
+	uint32_t time = static_cast<uint32_t>( globalvars->realtime );
+	if( query_limiter_enabled && !CheckIPRate( from, time ) )
+		return PacketType::Invalid;
+
+	if( info_cache_enabled )
+		return SendInfoCache( from, time );
+
+	return PacketType::Good;
+}
+
+static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_in &from )
 {
 	if( len == 0 )
 	{
@@ -411,11 +456,11 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 			len,
 			inet_ntoa( from.sin_addr )
 		);
-		return false;
+		return PacketType::Invalid;
 	}
 
 	if( len < 5 )
-		return true;
+		return PacketType::Good;
 
 	int32_t channel = *reinterpret_cast<const int32_t *>( data );
 	if( channel == -2 )
@@ -426,33 +471,20 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 			channel,
 			inet_ntoa( from.sin_addr )
 		);
-		return false;
+		return PacketType::Invalid;
 	}
 
 	if( channel != -1 )
-		return true;
+		return PacketType::Good;
 
 	uint8_t type = *reinterpret_cast<const uint8_t *>( data + 4 );
-	switch( type )
+	if( packet_validation_enabled )
 	{
-		case 'W': // server challenge request
-		case 's': // master server challenge
+		switch( type )
 		{
-			if( len > 100 )
-			{
-				DebugWarning(
-					"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
-					len,
-					channel,
-					type,
-					inet_ntoa( from.sin_addr )
-				);
-				return false;
-			}
-
-			if( len >= 18 )
-			{
-				if( strncmp( data + 5, "statusResponse", 14 ) == 0 )
+			case 'W': // server challenge request
+			case 's': // master server challenge
+				if( len > 100 )
 				{
 					DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
@@ -461,58 +493,54 @@ static bool IsDataValid( const char *data, int32_t len, const sockaddr_in &from 
 						type,
 						inet_ntoa( from.sin_addr )
 					);
-					return false;
+					return PacketType::Invalid;
 				}
-			}
 
-			return true;
+				if( len >= 18 && strncmp( data + 5, "statusResponse", 14 ) == 0 )
+				{
+					DebugWarning(
+						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
+						len,
+						channel,
+						type,
+						inet_ntoa( from.sin_addr )
+					);
+					return PacketType::Invalid;
+				}
+
+				return PacketType::Good;
+
+			case 'T': // server info request
+				return len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 ?
+					PacketType::Info : PacketType::Invalid;
+
+			case 'U': // player info request
+			case 'V': // rules request
+				return len == 9 ? PacketType::Good : PacketType::Invalid;
+
+			case 'q': // connection handshake init
+			case 'k': // steam auth packet
+				DebugMsg(
+					"[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from %s\n",
+					len,
+					channel,
+					type,
+					inet_ntoa( from.sin_addr )
+				);
+				return PacketType::Good;
 		}
 
-		case 'T': // server info request
-		{
-			if( len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 )
-			{
-				uint32_t time = static_cast<uint32_t>( globalvars->realtime );
-				if( query_limiter_enabled && !CheckIPRate( from, time ) )
-					return false;
-
-				if( info_cache_enabled )
-					return SendInfoCache( from, time );
-
-				return true; // the query is valid, continue
-			}
-
-			return false; // the query is invalid, stop processing
-		}
-
-		case 'U': // player info request
-		case 'V': // rules request
-		{
-			return len == 9;
-		}
-
-		case 'q': // connection handshake init
-		case 'k': // steam auth packet
-		{
-			DebugMsg(
-				"[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from %s\n",
-				len,
-				channel,
-				type,
-				inet_ntoa( from.sin_addr )
-			);
-			return true;
-		}
+		DebugWarning(
+			"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
+			len,
+			channel,
+			type,
+			inet_ntoa( from.sin_addr )
+		);
+		return PacketType::Invalid;
 	}
 
-	DebugWarning(
-		"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
-		len,
-		channel,
-		type,
-		inet_ntoa( from.sin_addr )
-	);
-	return false;
+	return type == 'T' ? PacketType::Info : PacketType::Good;
 }
 
 inline bool IsAddressWhitelisted( const sockaddr_in &addr )
@@ -563,7 +591,11 @@ static int32_t Hook_recvfrom_d(
 		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( infrom ) ) )
 			return SetNetError( );
 
-		if( packet_validation_enabled && !IsDataValid( buf, len, infrom ) )
+		PacketType type = ClassifyPacket( buf, len, infrom );
+		if( type == PacketType::Info )
+			type = HandleInfoQuery( infrom );
+
+		if( type == PacketType::Invalid )
 			return SetNetError( );
 
 		return len;
@@ -621,7 +653,11 @@ static uint32_t Hook_recvfrom_thread( void *param )
 		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( p.address ) ) )
 			continue;
 
-		if( packet_validation_enabled && !IsDataValid( tempbuf, len, p.address ) )
+		PacketType type = ClassifyPacket( tempbuf, len, p.address );
+		if( type == PacketType::Info )
+			type = HandleInfoQuery( p.address );
+
+		if( type == PacketType::Invalid )
 			continue;
 
 		p.buffer.assign( tempbuf, tempbuf + len );
@@ -698,6 +734,13 @@ LUA_FUNCTION_STATIC( SetInfoCacheTime )
 	return 0;
 }
 
+LUA_FUNCTION_STATIC( RefreshInfoCache )
+{
+	BuildStaticReplyInfo( );
+	BuildReplyInfo( );
+	return 0;
+}
+
 LUA_FUNCTION_STATIC( EnableQueryLimiter )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
@@ -728,14 +771,16 @@ LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
 
 void Initialize( lua_State *state )
 {
+	lua = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
+
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
 
-	IServerGameDLL *gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
+	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
 	if( gamedll == nullptr )
 		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
 
-	IVEngineServer *engine_server = global::engine_loader.GetInterface<IVEngineServer>(
+	engine_server = global::engine_loader.GetInterface<IVEngineServer>(
 		INTERFACEVERSION_VENGINESERVER_VERSION_21
 	);
 	if( engine_server == nullptr )
@@ -759,7 +804,7 @@ void Initialize( lua_State *state )
 	if( factory == nullptr )
 		LUA->ThrowError( "unable to retrieve dedicated factory" );
 
-	IFileSystem *filesystem = static_cast<IFileSystem *>( factory(
+	filesystem = static_cast<IFileSystem *>( factory(
 		FILESYSTEM_INTERFACE_VERSION,
 		nullptr
 	) );
@@ -801,7 +846,7 @@ void Initialize( lua_State *state )
 	if( threaded_socket_handle == nullptr )
 		LUA->ThrowError( "unable to create thread" );
 
-	BuildStaticReplyInfo( gamedll, engine_server, filesystem );
+	BuildStaticReplyInfo( );
 
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
@@ -826,6 +871,9 @@ void Initialize( lua_State *state )
 
 	LUA->PushCFunction( SetInfoCacheTime );
 	LUA->SetField( -2, "SetInfoCacheTime" );
+
+	LUA->PushCFunction( RefreshInfoCache );
+	LUA->SetField( -2, "RefreshInfoCache" );
 
 	LUA->PushCFunction( EnableQueryLimiter );
 	LUA->SetField( -2, "EnableQueryLimiter" );

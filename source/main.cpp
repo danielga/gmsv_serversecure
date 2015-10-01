@@ -16,11 +16,11 @@ static void PreInitialize( lua_State *state )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.1.3" );
+	LUA->PushString( "serversecure 1.1.4" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10103 );
+	LUA->PushNumber( 10104 );
 	LUA->SetField( -2, "VersionNum" );
 }
 
