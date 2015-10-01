@@ -68,10 +68,7 @@ struct reply_info_t
 {
 	std::string game_dir;
 	std::string game_version;
-	int32_t appid;
 	int32_t max_clients;
-	int32_t proto_version;
-	uint64_t steamid;
 	int32_t udp_port;
 	std::string tags;
 };
@@ -217,13 +214,13 @@ static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
 static void BuildStaticReplyInfo( )
 {
-	const CSteamID *steamid = engine_server->GetGameServerSteamID( );
-	if( steamid != nullptr )
-		reply_info.steamid = steamid->ConvertToUint64( );
-	else
-		reply_info.steamid = 0;
+	reply_info.game_dir.resize( 256 );
+	engine_server->GetGameDir( &reply_info.game_dir[0], reply_info.game_dir.size( ) );
+	reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
 
-	reply_info.appid = engine_server->GetAppID( );
+	size_t pos = reply_info.game_dir.find_last_of( "\\/" );
+	if( pos != reply_info.game_dir.npos )
+		reply_info.game_dir.erase( 0, pos + 1 );
 
 	reply_info.max_clients = server->GetMaxClients( );
 
@@ -316,9 +313,13 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
 	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
+
 	std::string gamedesc = GetGameDescription( );
 	info_cache_packet.WriteString( gamedesc.c_str( ) );
-	info_cache_packet.WriteShort( reply_info.appid );
+
+	int32_t appid = engine_server->GetAppID( );
+	info_cache_packet.WriteShort( appid );
+
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
 	info_cache_packet.WriteByte( reply_info.max_clients );
 	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
@@ -329,23 +330,32 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( SteamGameServer_BSecure( ) );
 	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
+	const CSteamID *sid = engine_server->GetGameServerSteamID( );
+	uint64_t steamid = 0;
+	if( sid != nullptr )
+		steamid = sid->ConvertToUint64( );
+
 	if( reply_info.tags.empty( ) )
 	{
 		// 0x80 - port number is present
 		// 0x10 - server steamid is present
-		info_cache_packet.WriteByte( 0x80 | 0x10 );
+		// 0x01 - game long appid is present
+		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x01 );
 		info_cache_packet.WriteShort( reply_info.udp_port );
-		info_cache_packet.WriteLongLong( reply_info.steamid );
+		info_cache_packet.WriteLongLong( steamid );
+		info_cache_packet.WriteLongLong( appid );
 	}
 	else
 	{
 		// 0x80 - port number is present
 		// 0x10 - server steamid is present
 		// 0x20 - tags are present
-		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x20 );
+		// 0x01 - game long appid is present
+		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x20 | 0x01 );
 		info_cache_packet.WriteShort( reply_info.udp_port );
-		info_cache_packet.WriteLongLong( reply_info.steamid );
+		info_cache_packet.WriteLongLong( steamid );
 		info_cache_packet.WriteString( reply_info.tags.c_str( ) );
+		info_cache_packet.WriteLongLong( appid );
 	}
 }
 
