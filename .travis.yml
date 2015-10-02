@@ -5,7 +5,7 @@ branches:
   only:
   - master
 install: git clone https://bitbucket.org/danielga/garrysmod_common.git && wget https://bitbucket.org/danielga/garrysmod_common/downloads/sourcesdk.tar.bz2 && tar -jxvf sourcesdk.tar.bz2
-before_script: cd projects && wget https://github.com/premake/premake-core/releases/download/v5.0.0-alpha5/premake-5.0.0-alpha5-linux.tar.gz && tar -xvf premake-5.0.0-alpha5-linux.tar.gz &&  && ./premake5 gmake --gmcommon=../garrysmod_common --sourcesdk=../sourcesdk && cd linux/gmake
+before_script: cd projects && wget https://github.com/premake/premake-core/releases/download/v5.0.0-alpha5/premake-5.0.0-alpha5-linux.tar.gz && tar -xvf premake-5.0.0-alpha5-linux.tar.gz && ./premake5 gmake --gmcommon=../garrysmod_common --sourcesdk=../sourcesdk && cd linux/gmake
 script: make
 before_deploy: cd release
 deploy:
