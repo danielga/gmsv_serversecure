@@ -8,6 +8,7 @@ addons:
     packages:
     - gcc-5
     - g++-5
+    - g++-multilib
 branches:
   only:
   - master
