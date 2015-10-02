@@ -7,6 +7,7 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - linux-libc-dev
+    - linux-libc-dev:i386
     - gcc-5
     - gcc-5-multilib
     - g++-5
