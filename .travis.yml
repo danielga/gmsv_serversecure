@@ -7,8 +7,9 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - gcc-5
+    - gcc-5-multilib
     - g++-5
-    - g++-multilib
+    - g++-5-multilib
 branches:
   only:
   - master
