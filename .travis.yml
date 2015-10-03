@@ -1,12 +1,16 @@
 language: cpp
 compiler: gcc
-os: linux
+os:
+  - linux
+  - osx
+cache:
+  directories:
+    - $HOME/garrysmod_common
+    - $HOME/sourcesdk
+    - $HOME/premake-core
 addons:
   apt:
-    sources:
-    - ubuntu-toolchain-r-test
     packages:
-    - linux-libc-dev
     - linux-libc-dev:i386
     - gcc-5
     - gcc-5-multilib
@@ -15,9 +19,9 @@ addons:
 branches:
   only:
   - master
-install: git clone --recursive https://bitbucket.org/danielga/garrysmod_common.git && wget https://bitbucket.org/danielga/garrysmod_common/downloads/sourcesdk.tar.bz2 && tar -jxvf sourcesdk.tar.bz2 && wget https://bitbucket.org/danielga/garrysmod_common/downloads/premake-core.tar.bz2 && tar -jxvf premake-core.tar.bz2 && cd premake-core && make CC=gcc-5 && cd ..
-before_script: cd projects && cp ../premake-core/bin/release/premake5 ./ && ./premake5 gmake --gmcommon=../garrysmod_common --sourcesdk=../sourcesdk && cd linux/gmake
-script: make CXX=g++-5
+install: bash .travis-install.sh
+before_script: cd projects && $HOME/premake-core/premake5 gmake --gmcommon=$HOME/garrysmod_common --sourcesdk=$HOME/sourcesdk
+script: cd linux/gmake && make CXX=g++-5
 before_deploy: cd release
 deploy:
   provider: releases
