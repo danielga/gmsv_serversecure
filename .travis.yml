@@ -39,7 +39,7 @@ install:
     fi
   - export REPO=`pwd`
   - cd $HOME
-  - if [ ! -d "garrysmod_common/premake5.lua" ]; then
+  - if [ ! -f "garrysmod_common/premake5.lua" ]; then
       echo "garrysmod_common directory is empty, doing git clone of the remote repo";
       git clone --recursive https://bitbucket.org/danielga/garrysmod_common.git;
     else
@@ -49,12 +49,12 @@ install:
       git submodule update --init --recursive;
       cd ..;
     fi
-  - if [ ! -d "sourcesdk/public" ]; then
+  - if [ ! -f "sourcesdk/LICENSE" ]; then
       echo "sourcesdk directory is empty, doing wget and untar";
       wget https://bitbucket.org/danielga/garrysmod_common/downloads/sourcesdk.tar.bz2;
       tar -jxvf sourcesdk.tar.bz2;
     fi
-  - if [ ! -d "premake-core/premake5" ]; then
+  - if [ ! -f "premake-core/premake5" ]; then
       echo "premake-core directory is empty, doing wget, untar, make and copy";
       wget https://bitbucket.org/danielga/garrysmod_common/downloads/$PREMAKE_CORE;
       tar -jxvf $PREMAKE_CORE;
