@@ -1,4 +1,4 @@
-# gmsv_serversecure
+# gmsv_serversecure [![Build Status](https://travis-ci.org/danielga/gmsv_serversecure.svg?branch=master)](https://travis-ci.org/danielga/gmsv_serversecure)
 
 A module for Garry's Mod that mitigates exploits on the Source engine.
 Based on these plugins from AzuiSleet:
