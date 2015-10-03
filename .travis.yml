@@ -10,18 +10,22 @@ cache:
     - $HOME/premake-core
 addons:
   apt:
+    sources:
+      - ubuntu-toolchain-r-test
     packages:
-    - linux-libc-dev:i386
-    - gcc-5
-    - gcc-5-multilib
-    - g++-5
-    - g++-5-multilib
+      - linux-libc-dev:i386
+      - gcc-5
+      - gcc-5-multilib
+      - g++-5
+      - g++-5-multilib
 branches:
   only:
-  - master
+    - master
 install: bash .travis-install.sh
 before_script: cd projects && $HOME/premake-core/premake5 gmake --gmcommon=$HOME/garrysmod_common --sourcesdk=$HOME/sourcesdk
-script: cd linux/gmake && make CXX=g++-5
+script:
+  - cd linux/gmake
+  - make
 before_deploy: cd release
 deploy:
   provider: releases
