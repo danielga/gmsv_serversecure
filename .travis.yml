@@ -21,7 +21,7 @@ addons:
 branches:
   only:
     - master
-install: bash .travis-install.sh
+before_install: bash .travis-install.sh
 before_script: cd projects && $PREMAKE5 gmake
 script:
   - cd linux/gmake

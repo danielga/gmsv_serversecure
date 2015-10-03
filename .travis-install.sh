@@ -5,10 +5,8 @@ export SOURCE_SDK=$HOME/sourcesdk
 
 if [[ ${TRAVIS_OS_NAME} = osx ]]; then
 	export PREMAKE5=$HOME/premake-core/premake5
-	if [[ ${CC} = gcc ]]; then
-		export CXX=g++-4.8
-		export CC=gcc-4.8
-	fi
+	export CXX=g++-4.8
+	export CC=gcc-4.8
 elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
 	export PREMAKE5=$HOME/premake-core/premake5
 	export CXX=g++-5
@@ -19,9 +17,6 @@ fi
 set -e
 
 cd $HOME
-
-# HERE YOU GO POTCFDK
-ls -a
 
 # if the garrysmod_common dir doesn't exist (isn't cached yet), then git clone the repo
 # otherwise, cd to it, pull the latest commit and update all of its submodules
