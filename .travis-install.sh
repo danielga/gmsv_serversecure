@@ -4,12 +4,12 @@ export GARRYSMOD_COMMON=$HOME/garrysmod_common
 export SOURCE_SDK=$HOME/sourcesdk
 
 if [[ ${TRAVIS_OS_NAME} = osx ]]; then
-	export PREMAKE_CORE=premake-core-macosx.tar.bz2
+	PREMAKE_CORE=premake-core-macosx.tar.bz2
 	export PREMAKE5=$HOME/premake-core/premake5
 	export CXX=g++-4.8
 	export CC=gcc-4.8
 elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
-	export PREMAKE_CORE=premake-core-linux.tar.bz2
+	PREMAKE_CORE=premake-core-linux.tar.bz2
 	export PREMAKE5=$HOME/premake-core/premake5
 	export CXX=g++-5
 	export CC=gcc-5
