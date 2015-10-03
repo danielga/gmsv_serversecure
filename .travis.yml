@@ -22,7 +22,7 @@ branches:
   only:
     - master
 install: bash .travis-install.sh
-before_script: cd projects && $HOME/premake-core/premake5 gmake --gmcommon=$HOME/garrysmod_common --sourcesdk=$HOME/sourcesdk
+before_script: cd projects && $PREMAKE5 gmake
 script:
   - cd linux/gmake
   - make
