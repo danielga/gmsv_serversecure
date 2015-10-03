@@ -26,7 +26,8 @@ fi
 # then cd to its dir, make, go back up and copy the executable to premake-core
 if [ ! -d "$HOME/premake-core" ]; then
 	wget https://bitbucket.org/danielga/garrysmod_common/downloads/premake-core.tar.bz2
-	tar -jxvf premake-core.tar.bz2 -C premake-core-build
+	tar -jxvf premake-core.tar.bz2
+	mv premake-core premake-core-build
 	cd premake-core-build
 	make CC=gcc-5
 	cd ..
