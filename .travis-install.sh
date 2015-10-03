@@ -51,5 +51,5 @@ if [ ! -d "premake-core/premake5" ]; then
 	make
 	cd ..
 	mkdir premake-core
-	cp premake-core-build/premake-core/bin/release/premake5 premake-core
+	cp premake-core-build/bin/release/premake5 premake-core
 fi
