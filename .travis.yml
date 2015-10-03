@@ -35,6 +35,7 @@ install:
       export CXX=g++-5;
       export CC=gcc-5;
     fi
+  - export REPO=`pwd`
   - cd $HOME
   - if [ ! -d "garrysmod_common/premake5.lua" ]; then
       echo "garrysmod_common directory is empty, doing git clone of the remote repo";
@@ -62,8 +63,7 @@ install:
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
     fi
-  - cd danielga/gmsv_serversecure
-before_script: cd projects && $PREMAKE5 gmake
+before_script: cd $REPO/projects && $PREMAKE5 gmake
 script:
   - cd linux/gmake
   - make
