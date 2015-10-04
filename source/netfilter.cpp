@@ -1,7 +1,6 @@
 #include <netfilter.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/LuaInterface.h>
-#include <GarrysMod/Lua/AutoLock.h>
 #include <cstdint>
 #include <set>
 #include <unordered_set>
@@ -68,6 +67,7 @@ struct reply_info_t
 {
 	std::string game_dir;
 	std::string game_version;
+	std::string game_desc;
 	int32_t max_clients;
 	int32_t udp_port;
 	std::string tags;
@@ -219,8 +219,38 @@ static IVEngineServer *engine_server = nullptr;
 static IFileSystem *filesystem = nullptr;
 static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
+inline std::string GetGameDescription( )
+{
+	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->Pop( 1 );
+		return "";
+	}
+
+	lua->GetField( -1, "Run" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	lua->PushString( "GetGameDescription" );
+	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	std::string gamedesc = lua->GetString( -1 );
+	lua->Pop( 2 );
+	return gamedesc;
+}
+
 static void BuildStaticReplyInfo( )
 {
+	reply_info.game_desc = GetGameDescription( );
+
 	reply_info.game_dir.resize( 256 );
 	engine_server->GetGameDir( &reply_info.game_dir[0], reply_info.game_dir.size( ) );
 	reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
@@ -277,36 +307,6 @@ static void BuildStaticReplyInfo( )
 	}
 }
 
-inline std::string GetGameDescription( )
-{
-	GarrysMod::Lua::AutoLock lua_locker( lua );
-
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->Pop( 1 );
-		return "";
-	}
-
-	lua->GetField( -1, "Run" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	lua->PushString( "GetGameDescription" );
-	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	std::string gamedesc = lua->GetString( -1 );
-	lua->Pop( 2 );
-	return gamedesc;
-}
-
 // maybe divide into low priority and high priority data?
 // low priority would be VAC protection status for example
 // updated on a much bigger period
@@ -320,9 +320,7 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
 	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
-
-	std::string gamedesc = GetGameDescription( );
-	info_cache_packet.WriteString( gamedesc.c_str( ) );
+	info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
 
 	int32_t appid = engine_server->GetAppID( );
 	info_cache_packet.WriteShort( appid );
@@ -369,7 +367,6 @@ static void BuildReplyInfo( )
 inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 {
 	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
-	{
 		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
 		{
 			const query_client_t &client = *it;
@@ -381,7 +378,6 @@ inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 					break;
 			}
 		}
-	}
 
 	query_client_t client = { from.sin_addr.s_addr, time, 1 };
 	auto it = query_limiter_clients.find( client );
