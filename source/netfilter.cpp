@@ -836,7 +836,7 @@ void Initialize( lua_State *state )
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
 
-	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
+	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL_VERSION_9 );
 	if( gamedll == nullptr )
 		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
 
