@@ -1,7 +1,6 @@
 #include <netfilter.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/LuaInterface.h>
-#include <GarrysMod/Lua/AutoLock.h>
 #include <cstdint>
 #include <set>
 #include <unordered_set>
@@ -68,6 +67,7 @@ struct reply_info_t
 {
 	std::string game_dir;
 	std::string game_version;
+	std::string game_desc;
 	int32_t max_clients;
 	int32_t udp_port;
 	std::string tags;
@@ -186,7 +186,7 @@ static bool packet_validation_enabled = false;
 static bool firewall_enabled = false;
 static std::unordered_set<uint32_t> firewall_whitelist;
 
-static const size_t thread_socket_max_queue = 1000;
+static const size_t threaded_socket_max_queue = 1000;
 static bool threaded_socket_enabled = false;
 static bool threaded_socket_execute = true;
 static ThreadHandle_t threaded_socket_handle = nullptr;
@@ -212,6 +212,10 @@ static uint32_t query_limiter_max_window = 60;
 static uint32_t query_limiter_max_sec = 1;
 static uint32_t query_limiter_global_max_sec = 50;
 
+static const size_t packet_sampling_max_queue = 10;
+static bool packet_sampling_enabled = false;
+static std::deque<packet_t> packet_sampling_queue;
+
 static IServer *server = nullptr;
 static CGlobalVars *globalvars = nullptr;
 static IServerGameDLL *gamedll = nullptr;
@@ -219,15 +223,47 @@ static IVEngineServer *engine_server = nullptr;
 static IFileSystem *filesystem = nullptr;
 static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
+inline std::string GetGameDescription( )
+{
+	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->Pop( 1 );
+		return "";
+	}
+
+	lua->GetField( -1, "Run" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	lua->PushString( "GetGameDescription" );
+	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+	{
+		lua->Pop( 2 );
+		return "";
+	}
+
+	std::string gamedesc = lua->GetString( -1 );
+	lua->Pop( 2 );
+	return gamedesc;
+}
+
 static void BuildStaticReplyInfo( )
 {
-	reply_info.game_dir.resize( 256 );
-	engine_server->GetGameDir( &reply_info.game_dir[0], reply_info.game_dir.size( ) );
-	reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
+	reply_info.game_desc = GetGameDescription( );
 
-	size_t pos = reply_info.game_dir.find_last_of( "\\/" );
-	if( pos != reply_info.game_dir.npos )
-		reply_info.game_dir.erase( 0, pos + 1 );
+	{
+		reply_info.game_dir.resize( 256 );
+		engine_server->GetGameDir( &reply_info.game_dir[0], reply_info.game_dir.size( ) );
+		reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
+
+		size_t pos = reply_info.game_dir.find_last_of( "\\/" );
+		if( pos != reply_info.game_dir.npos )
+			reply_info.game_dir.erase( 0, pos + 1 );
+	}
 
 	reply_info.max_clients = server->GetMaxClients( );
 
@@ -277,36 +313,6 @@ static void BuildStaticReplyInfo( )
 	}
 }
 
-inline std::string GetGameDescription( )
-{
-	GarrysMod::Lua::AutoLock lua_locker( lua );
-
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->Pop( 1 );
-		return "";
-	}
-
-	lua->GetField( -1, "Run" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	lua->PushString( "GetGameDescription" );
-	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	std::string gamedesc = lua->GetString( -1 );
-	lua->Pop( 2 );
-	return gamedesc;
-}
-
 // maybe divide into low priority and high priority data?
 // low priority would be VAC protection status for example
 // updated on a much bigger period
@@ -320,9 +326,7 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteString( server->GetName( ) );
 	info_cache_packet.WriteString( server->GetMapName( ) );
 	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
-
-	std::string gamedesc = GetGameDescription( );
-	info_cache_packet.WriteString( gamedesc.c_str( ) );
+	info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
 
 	int32_t appid = engine_server->GetAppID( );
 	info_cache_packet.WriteShort( appid );
@@ -369,7 +373,6 @@ static void BuildReplyInfo( )
 inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 {
 	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
-	{
 		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
 		{
 			const query_client_t &client = *it;
@@ -381,7 +384,6 @@ inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 					break;
 			}
 		}
-	}
 
 	query_client_t client = { from.sin_addr.s_addr, time, 1 };
 	auto it = query_limiter_clients.find( client );
@@ -565,23 +567,24 @@ inline bool IsAddressWhitelisted( const sockaddr_in &addr )
 	return firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( );
 }
 
-inline int32_t SetNetError( )
+inline int32_t HandleNetError( int32_t value )
 {
+	if( value == -1 )
 
 #if defined _WIN32
 
-	WSASetLastError( WSAEWOULDBLOCK );
+		WSASetLastError( WSAEWOULDBLOCK );
 
 #elif defined __linux || defined __APPLE__
 
-	errno = EWOULDBLOCK;
+		errno = EWOULDBLOCK;
 
 #endif
 
-	return -1;
+	return value;
 }
 
-inline packet_t GetPacket( )
+inline packet_t GetQueuedPacket( )
 {
 	//bool full = threaded_socket_queue.size( ) >= thread_socket_max_queue;
 	packet_t p = threaded_socket_queue.front( );
@@ -589,6 +592,43 @@ inline packet_t GetPacket( )
 	// maybe have an algorithm for when the queue is full
 	// drop certain packet types like queries
 	return p;
+}
+
+inline int32_t ReceiveAndAnalyzePacket(
+	int32_t s,
+	char *buf,
+	int32_t buflen,
+	int32_t flags,
+	sockaddr *from,
+	int32_t *fromlen
+)
+{
+	sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
+	int32_t len = Hook_recvfrom( s, buf, buflen, flags, from, fromlen );
+	if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( infrom ) ) )
+		return -1;
+
+	PacketType type = ClassifyPacket( buf, len, infrom );
+	if( type == PacketType::Info )
+		type = HandleInfoQuery( infrom );
+
+	if( type == PacketType::Invalid )
+		return -1;
+
+	if( packet_sampling_enabled )
+	{
+		// there should only be packet_sampling_max_queue packets on the queue at the moment of this check
+		if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
+			packet_sampling_queue.pop_front( );
+
+		packet_t p;
+		memcpy( &p.address, from, *fromlen );
+		p.address_size = *fromlen;
+		p.buffer.assign( buf, buf + len );
+		packet_sampling_queue.push_back( p );
+	}
+
+	return len;
 }
 
 static int32_t Hook_recvfrom_d(
@@ -600,28 +640,13 @@ static int32_t Hook_recvfrom_d(
 	int32_t *fromlen
 )
 {
-	sockaddr_in infrom = { 0 };
-	memcpy( &infrom, from, *fromlen > sizeof( infrom ) ? sizeof( infrom ) : *fromlen );
 	if( !threaded_socket_enabled && threaded_socket_queue.empty( ) )
-	{
-		int32_t len = Hook_recvfrom( s, buf, buflen, flags, from, fromlen );
-		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( infrom ) ) )
-			return SetNetError( );
-
-		PacketType type = ClassifyPacket( buf, len, infrom );
-		if( type == PacketType::Info )
-			type = HandleInfoQuery( infrom );
-
-		if( type == PacketType::Invalid )
-			return SetNetError( );
-
-		return len;
-	}
+		return HandleNetError( ReceiveAndAnalyzePacket( s, buf, buflen, flags, from, fromlen ) );
 
 	if( threaded_socket_queue.empty( ) )
-		return SetNetError( );
+		return HandleNetError( -1 );
 
-	packet_t p = GetPacket( );
+	packet_t p = GetQueuedPacket( );
 	int32_t len = static_cast<int32_t>( p.buffer.size( ) );
 	if( len > buflen )
 		len = buflen;
@@ -645,7 +670,7 @@ static uint32_t Hook_recvfrom_thread( void *param )
 
 	while( threaded_socket_execute )
 	{
-		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= thread_socket_max_queue )
+		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= threaded_socket_max_queue )
 		// testing for maximum queue size, this is a very cheap "fix"
 		// the socket itself has a queue too but will start dropping packets when full
 		{
@@ -659,7 +684,7 @@ static uint32_t Hook_recvfrom_thread( void *param )
 			continue;
 
 		packet_t p;
-		int32_t len = Hook_recvfrom(
+		int32_t len = ReceiveAndAnalyzePacket(
 			game_socket,
 			tempbuf,
 			sizeof( tempbuf ),
@@ -667,14 +692,7 @@ static uint32_t Hook_recvfrom_thread( void *param )
 			reinterpret_cast<sockaddr *>( &p.address ),
 			&p.address_size
 		);
-		if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( p.address ) ) )
-			continue;
-
-		PacketType type = ClassifyPacket( tempbuf, len, p.address );
-		if( type == PacketType::Info )
-			type = HandleInfoQuery( p.address );
-
-		if( type == PacketType::Invalid )
+		if( len == -1 )
 			continue;
 
 		p.buffer.assign( tempbuf, tempbuf + len );
@@ -786,6 +804,31 @@ LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
 	return 0;
 }
 
+
+LUA_FUNCTION_STATIC( EnablePacketSampling )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+
+	packet_sampling_enabled = LUA->GetBool( 1 );
+	if( !packet_sampling_enabled )
+		packet_sampling_queue.clear( );
+
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( GetSamplePacket )
+{
+	if( packet_sampling_queue.empty( ) )
+		return 0;
+
+	packet_t p = packet_sampling_queue.front( );
+	packet_sampling_queue.pop_front( );
+	LUA->PushNumber( p.address.sin_addr.s_addr );
+	LUA->PushNumber( p.address.sin_port );
+	LUA->PushString( p.buffer.data( ), p.buffer.size( ) );
+	return 3;
+}
+
 void Initialize( lua_State *state )
 {
 	lua = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
@@ -793,7 +836,7 @@ void Initialize( lua_State *state )
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
 
-	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
+	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL_VERSION_9 );
 	if( gamedll == nullptr )
 		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
 
@@ -903,6 +946,12 @@ void Initialize( lua_State *state )
 
 	LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
 	LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
+
+	LUA->PushCFunction( EnablePacketSampling );
+	LUA->SetField( -2, "EnablePacketSampling" );
+
+	LUA->PushCFunction( GetSamplePacket );
+	LUA->SetField( -2, "GetSamplePacket" );
 }
 
 void Deinitialize( lua_State * )
