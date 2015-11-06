@@ -183,8 +183,11 @@ static int32_t game_socket = -1;
 
 static bool packet_validation_enabled = false;
 
-static bool firewall_enabled = false;
+static bool firewall_whitelist_enabled = false;
 static std::unordered_set<uint32_t> firewall_whitelist;
+
+static bool firewall_blacklist_enabled = false;
+static std::unordered_set<uint32_t> firewall_blacklist;
 
 static const size_t threaded_socket_max_queue = 1000;
 static bool threaded_socket_enabled = false;
@@ -372,6 +375,9 @@ static void BuildReplyInfo( )
 
 inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
 {
+	if( !query_limiter_enabled )
+		return true;
+
 	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
 		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
 		{
@@ -457,7 +463,7 @@ inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 static PacketType HandleInfoQuery( const sockaddr_in &from )
 {
 	uint32_t time = static_cast<uint32_t>( globalvars->realtime );
-	if( query_limiter_enabled && !CheckIPRate( from, time ) )
+	if( !CheckIPRate( from, time ) )
 		return PacketType::Invalid;
 
 	if( info_cache_enabled )
@@ -562,9 +568,13 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 	return type == 'T' ? PacketType::Info : PacketType::Good;
 }
 
-inline bool IsAddressWhitelisted( const sockaddr_in &addr )
+inline bool IsAddressAllowed( const sockaddr_in &addr )
 {
-	return firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( );
+	return
+		( !firewall_whitelist_enabled ||
+		firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( ) ) &&
+		( !firewall_blacklist_enabled ||
+			firewall_blacklist.find( addr.sin_addr.s_addr ) == firewall_blacklist.end( ) );
 }
 
 inline int32_t HandleNetError( int32_t value )
@@ -605,14 +615,7 @@ inline int32_t ReceiveAndAnalyzePacket(
 {
 	sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
 	int32_t len = Hook_recvfrom( s, buf, buflen, flags, from, fromlen );
-	if( len == -1 || ( firewall_enabled && !IsAddressWhitelisted( infrom ) ) )
-		return -1;
-
-	PacketType type = ClassifyPacket( buf, len, infrom );
-	if( type == PacketType::Info )
-		type = HandleInfoQuery( infrom );
-
-	if( type == PacketType::Invalid )
+	if( len == -1 )
 		return -1;
 
 	if( packet_sampling_enabled )
@@ -627,6 +630,16 @@ inline int32_t ReceiveAndAnalyzePacket(
 		p.buffer.assign( buf, buf + len );
 		packet_sampling_queue.push_back( p );
 	}
+
+	if( !IsAddressAllowed( infrom ) )
+		return -1;
+
+	PacketType type = ClassifyPacket( buf, len, infrom );
+	if( type == PacketType::Info )
+		type = HandleInfoQuery( infrom );
+
+	if( type == PacketType::Invalid )
+		return -1;
 
 	return len;
 }
@@ -706,36 +719,68 @@ inline void SetDetourStatus( bool enabled )
 {
 	if( enabled )
 		VCRHook_recvfrom = Hook_recvfrom_d;
-	else if( !firewall_enabled && !packet_validation_enabled && !threaded_socket_enabled )
+	else if( !firewall_whitelist_enabled &&
+		!firewall_blacklist_enabled &&
+		!packet_validation_enabled &&
+		!threaded_socket_enabled )
 		VCRHook_recvfrom = Hook_recvfrom;
 }
 
 LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	firewall_enabled = LUA->GetBool( 1 );
-	SetDetourStatus( firewall_enabled );
+	firewall_whitelist_enabled = LUA->GetBool( 1 );
+	SetDetourStatus( firewall_whitelist_enabled );
 	return 0;
 }
 
 // Whitelisted IPs bytes need to be in network order (big endian)
-LUA_FUNCTION_STATIC( WhitelistIP )
+LUA_FUNCTION_STATIC( AddWhitelistIP )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
 	firewall_whitelist.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 	return 0;
 }
 
-LUA_FUNCTION_STATIC( RemoveIP )
+LUA_FUNCTION_STATIC( RemoveWhitelistIP )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
 	firewall_whitelist.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 	return 0;
 }
 
-LUA_FUNCTION_STATIC( WhitelistReset )
+LUA_FUNCTION_STATIC( ResetWhitelist )
 {
 	std::unordered_set<uint32_t>( ).swap( firewall_whitelist );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( EnableFirewallBlacklist )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+	firewall_blacklist_enabled = LUA->GetBool( 1 );
+	SetDetourStatus( firewall_blacklist_enabled );
+	return 0;
+}
+
+// Blacklisted IPs bytes need to be in network order (big endian)
+LUA_FUNCTION_STATIC( AddBlacklistIP )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	firewall_blacklist.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( RemoveBlacklistIP )
+{
+	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+	firewall_blacklist.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
+	return 0;
+}
+
+LUA_FUNCTION_STATIC( ResetBlacklist )
+{
+	std::unordered_set<uint32_t>( ).swap( firewall_blacklist );
 	return 0;
 }
 
@@ -803,7 +848,6 @@ LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
 	query_limiter_global_max_sec = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
 	return 0;
 }
-
 
 LUA_FUNCTION_STATIC( EnablePacketSampling )
 {
@@ -911,14 +955,26 @@ void Initialize( lua_State *state )
 	LUA->PushCFunction( EnableFirewallWhitelist );
 	LUA->SetField( -2, "EnableFirewallWhitelist" );
 
-	LUA->PushCFunction( WhitelistIP );
-	LUA->SetField( -2, "WhitelistIP" );
+	LUA->PushCFunction( AddWhitelistIP );
+	LUA->SetField( -2, "AddWhitelistIP" );
 
-	LUA->PushCFunction( RemoveIP );
-	LUA->SetField( -2, "RemoveIP" );
+	LUA->PushCFunction( RemoveWhitelistIP );
+	LUA->SetField( -2, "RemoveWhitelistIP" );
 
-	LUA->PushCFunction( WhitelistReset );
-	LUA->SetField( -2, "WhitelistReset" );
+	LUA->PushCFunction( ResetWhitelist );
+	LUA->SetField( -2, "ResetWhitelist" );
+
+	LUA->PushCFunction( EnableFirewallBlacklist );
+	LUA->SetField( -2, "EnableFirewallBlacklist" );
+
+	LUA->PushCFunction( AddBlacklistIP );
+	LUA->SetField( -2, "AddBlacklistIP" );
+
+	LUA->PushCFunction( RemoveBlacklistIP );
+	LUA->SetField( -2, "RemoveBlacklistIP" );
+
+	LUA->PushCFunction( ResetBlacklist );
+	LUA->SetField( -2, "ResetBlacklist" );
 
 	LUA->PushCFunction( EnablePacketValidation );
 	LUA->SetField( -2, "EnablePacketValidation" );
