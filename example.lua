@@ -1,10 +1,15 @@
 hook.Add("Initialize", "serversecure initialization", function()
 	require("serversecure")
 
-	--serversecure.EnableFirewallWhitelist(boolean) -- enable "firewall", any client not in the whitelist doesn't see the server
-	--serversecure.WhitelistIP(ip_in_integer_format) -- add an IP to the whitelist
-	--serversecure.RemoveIP(ip_in_integer_format) -- remove an IP from the whitelist
-	--serversecure.WhitelistReset() -- reset the whitelist
+	--serversecure.EnableFirewallWhitelist(boolean) -- enable "firewall" whitelist, any client not in the whitelist doesn't see the server
+	--serversecure.AddWhitelistIP(ip_in_integer_format) -- add an IP to the whitelist
+	--serversecure.RemoveWhitelistIP(ip_in_integer_format) -- remove an IP from the whitelist
+	--serversecure.ResetWhitelist() -- reset the whitelist
+
+	--serversecure.EnableFirewallBlacklist(boolean) -- enable "firewall" blacklist, any client in the blacklist doesn't see the server
+	--serversecure.AddBlacklistIP(ip_in_integer_format) -- add an IP to the blacklist
+	--serversecure.RemoveBlacklistIP(ip_in_integer_format) -- remove an IP from the blacklist
+	--serversecure.ResetBlacklist() -- reset the blacklist
 
 	serversecure.EnableFileValidation(true) -- validates files requested by clients for download
 
