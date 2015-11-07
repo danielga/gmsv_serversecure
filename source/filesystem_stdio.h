@@ -3,6 +3,13 @@
 #include <cstdint>
 #include <filesystem.h>
 
+namespace Gamemode
+{
+
+class System;
+
+}
+
 class CFileSystem_Stdio
 {
 public:													//  Index Offset
@@ -121,7 +128,7 @@ public:													//  Index Offset
 	virtual void RemoveSearchPathsByGroup(int);								// 0112  01C0
 	virtual void SetGet(class IGet *);								// 0113  01C4
 	virtual void Addons();								// 0114  01C8
-	virtual uintptr_t Gamemodes();								// 0115  01CC
+	virtual Gamemode::System *Gamemodes();								// 0115  01CC
 	virtual void Games();								// 0116  01D0
 	virtual void LegacyAddons();								// 0117  01D4
 	virtual void Language();								// 0118  01D8

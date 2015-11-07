@@ -8,6 +8,7 @@
 #include <string>
 #include <eiface.h>
 #include <filesystem_stdio.h>
+#include <gamemode.h>
 #include <iserver.h>
 #include <threadtools.h>
 #include <utlvector.h>
@@ -273,11 +274,8 @@ static void BuildStaticReplyInfo( )
 	reply_info.udp_port = server->GetUDPPort( );
 
 	{
-		uintptr_t gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
-		GetGamemode_t GetGamemode = *reinterpret_cast<GetGamemode_t *>(
-			*reinterpret_cast<uintptr_t *>( gamemodes ) + GetGamemode_offset
-		);
-		gamemode_t *gamemode = reinterpret_cast<gamemode_t *>( GetGamemode( gamemodes ) );
+		Gamemode::System *gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
+		gamemode_t *gamemode = static_cast<gamemode_t *>( gamemodes->Active( ) );
 
 		reply_info.tags = " gm:";
 		reply_info.tags += gamemode->path;
