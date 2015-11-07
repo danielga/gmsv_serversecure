@@ -11,6 +11,13 @@
 namespace filecheck
 {
 
+enum class ValidationMode
+{
+	None,
+	Fixed,
+	Lua
+};
+
 #if defined _WIN32
 
 static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x8B\x4D\x08\x85\xC9\x0F\x84\x2A\x2A\x2A\x2A\x80\x39";
@@ -37,7 +44,7 @@ static INetworkStringTable *downloads = nullptr;
 static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
 
 static GarrysMod::Lua::ILuaInterface *lua_interface = nullptr;
-static uint32_t validation_mode = 0;
+static ValidationMode validation_mode = ValidationMode::None;
 static const char *hook_name = "IsValidFileForTransfer";
 
 static bool PushDebugTraceback( GarrysMod::Lua::ILuaInterface *lua )
@@ -108,7 +115,7 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 		return false;
 	}
 
-	if( validation_mode == 2 )
+	if( validation_mode == ValidationMode::Lua )
 	{
 		if( !PushHookRun( lua_interface ) )
 			return false;
@@ -150,9 +157,9 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 	return BlockDownload( filepath );
 }
 
-inline bool SetDetourStatus( uint32_t mode )
+inline bool SetDetourStatus( ValidationMode mode )
 {
-	if( ( mode == 1 || mode == 2 ) && IsValidFileForTransfer_detour == nullptr )
+	if( mode != ValidationMode::None && IsValidFileForTransfer_detour == nullptr )
 	{
 		IsValidFileForTransfer_detour = new( std::nothrow ) MologieDetours::Detour<IsValidFileForTransfer_t>(
 			IsValidFileForTransfer,
@@ -165,7 +172,7 @@ inline bool SetDetourStatus( uint32_t mode )
 		}
 	}
 
-	if( mode == 0 && IsValidFileForTransfer_detour != nullptr )
+	if( mode == ValidationMode::None && IsValidFileForTransfer_detour != nullptr )
 	{
 		delete IsValidFileForTransfer_detour;
 		IsValidFileForTransfer_detour = nullptr;
@@ -178,8 +185,28 @@ inline bool SetDetourStatus( uint32_t mode )
 
 LUA_FUNCTION_STATIC( EnableFileValidation )
 {
-	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	LUA->PushBool( SetDetourStatus( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) ) );
+	if( LUA->Top( ) < 1 )
+		LUA->ArgError( 1, "number expected, got nil" );
+
+	ValidationMode mode = ValidationMode::Fixed;
+	if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
+	{
+		mode = LUA->GetBool( 1 ) ? ValidationMode::Fixed : ValidationMode::None;
+	}
+	else if( LUA->IsType( 1, GarrysMod::Lua::Type::NUMBER ) )
+	{
+		int32_t num = static_cast<int32_t>( LUA->GetNumber( 1 ) );
+		if( num < 0 || num > 2 )
+			LUA->ArgError( 1, "invalid mode value, must be 0, 1 or 2" );
+
+		mode = static_cast<ValidationMode>( num );
+	}
+	else
+	{
+		LUA->ArgError( 1, "number expected" );
+	}
+
+	LUA->PushBool( SetDetourStatus( mode ) );
 	return 1;
 }
 

@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <queue>
 #include <string>
+#include <tuple>
 #include <eiface.h>
 #include <filesystem_stdio.h>
 #include <gamemode.h>
@@ -251,6 +252,76 @@ inline std::string GetGameDescription( )
 	return gamedesc;
 }
 
+inline std::pair<std::string, std::string> GetActiveGamemode( )
+{
+	std::string gamemode = "base", workshopid;
+
+	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "engine" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->Pop( 1 );
+		return std::make_pair( gamemode, workshopid );
+	}
+
+	lua->GetField( -1, "ActiveGamemode" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	{
+		lua->Pop( 2 );
+		return std::make_pair( gamemode, workshopid );
+	}
+
+	if( lua->PCall( 0, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+	{
+		lua->Pop( 2 );
+		return std::make_pair( gamemode, workshopid );
+	}
+
+	gamemode = lua->GetString( -1 );
+
+	lua->Pop( 1 );
+
+	lua->GetField( -1, "GetGamemodes" );
+	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	{
+		lua->Pop( 2 );
+		return std::make_pair( gamemode, workshopid );
+	}
+
+	if( lua->PCall( 0, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->Pop( 2 );
+		return std::make_pair( gamemode, workshopid );
+	}
+
+	size_t index = 1;
+	lua->PushNumber( index );
+	lua->GetTable( -2 );
+	while( lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	{
+		lua->GetField( -1, "name" );
+		if( lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+		{
+			std::string gmname = lua->GetString( -1 );
+			if( gmname == gamemode )
+			{
+				lua->GetField( -2, "workshopid" );
+				if( lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
+					workshopid = lua->GetString( -1 );
+
+				lua->Pop( 1 );
+			}
+		}
+
+		lua->Pop( 2 );
+
+		lua->PushNumber( ++index );
+		lua->GetTable( -2 );
+	}
+
+	lua->Pop( 3 );
+	return std::make_pair( gamemode, workshopid );
+}
+
 static void BuildStaticReplyInfo( )
 {
 	reply_info.game_desc = GetGameDescription( );
@@ -270,16 +341,16 @@ static void BuildStaticReplyInfo( )
 	reply_info.udp_port = server->GetUDPPort( );
 
 	{
-		Gamemode::System *gamemodes = reinterpret_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( );
-		gamemode_t *gamemode = static_cast<gamemode_t *>( gamemodes->Active( ) );
+		std::string gamemode, workshopid;
+		std::tie( gamemode, workshopid ) = GetActiveGamemode( );
 
 		reply_info.tags = " gm:";
-		reply_info.tags += gamemode->path;
+		reply_info.tags += gamemode;
 
-		if( !gamemode->workshopid.empty( ) )
+		if( !workshopid.empty( ) )
 		{
 			reply_info.tags += " gmws:";
-			reply_info.tags += gamemode->workshopid;
+			reply_info.tags += workshopid;
 		}
 	}
 
