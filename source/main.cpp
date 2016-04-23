@@ -1,7 +1,13 @@
 #include <main.hpp>
-#include <interfaces.hpp>
 #include <netfilter.hpp>
 #include <filecheck.hpp>
+#include <GarrysMod/Lua/Interface.h>
+
+#if defined _WIN32 && _MSC_VER != 1600
+
+#error The only supported compilation platform for this project on Windows is Visual Studio 2010 (for ABI reasons).
+
+#endif
 
 namespace global
 {
@@ -16,11 +22,11 @@ static void PreInitialize( lua_State *state )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.3.1" );
+	LUA->PushString( "serversecure 1.3.2" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10301 );
+	LUA->PushNumber( 10302 );
 	LUA->SetField( -2, "VersionNum" );
 }
 

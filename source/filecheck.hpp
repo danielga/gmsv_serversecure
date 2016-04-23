@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GarrysMod/Lua/Interface.h>
+struct lua_State;
 
 namespace filecheck
 {

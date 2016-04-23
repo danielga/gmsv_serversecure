@@ -1,6 +1,6 @@
-#include <GarrysMod/Lua/LuaInterface.h>
 #include <filecheck.hpp>
 #include <main.hpp>
+#include <GarrysMod/Lua/Interface.h>
 #include <cstdint>
 #include <string>
 #include <symbolfinder.hpp>
@@ -11,11 +11,11 @@
 namespace filecheck
 {
 
-enum class ValidationMode
+enum ValidationMode
 {
-	None,
-	Fixed,
-	Lua
+	ValidationModeNone,
+	ValidationModeFixed,
+	ValidationModeLua
 };
 
 #if defined _WIN32
@@ -44,7 +44,7 @@ static INetworkStringTable *downloads = nullptr;
 static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
 
 static GarrysMod::Lua::ILuaInterface *lua_interface = nullptr;
-static ValidationMode validation_mode = ValidationMode::None;
+static ValidationMode validation_mode = ValidationModeNone;
 static const char *hook_name = "IsValidFileForTransfer";
 
 static bool PushDebugTraceback( GarrysMod::Lua::ILuaInterface *lua )
@@ -115,7 +115,7 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 		return false;
 	}
 
-	if( validation_mode == ValidationMode::Lua )
+	if( validation_mode == ValidationModeLua )
 	{
 		if( !PushHookRun( lua_interface ) )
 			return false;
@@ -159,7 +159,7 @@ static bool IsValidFileForTransfer_d( const char *filepath )
 
 inline bool SetDetourStatus( ValidationMode mode )
 {
-	if( mode != ValidationMode::None && IsValidFileForTransfer_detour == nullptr )
+	if( mode != ValidationModeNone && IsValidFileForTransfer_detour == nullptr )
 	{
 		IsValidFileForTransfer_detour = new( std::nothrow ) MologieDetours::Detour<IsValidFileForTransfer_t>(
 			IsValidFileForTransfer,
@@ -172,7 +172,7 @@ inline bool SetDetourStatus( ValidationMode mode )
 		}
 	}
 
-	if( mode == ValidationMode::None && IsValidFileForTransfer_detour != nullptr )
+	if( mode == ValidationModeNone && IsValidFileForTransfer_detour != nullptr )
 	{
 		delete IsValidFileForTransfer_detour;
 		IsValidFileForTransfer_detour = nullptr;
@@ -188,10 +188,10 @@ LUA_FUNCTION_STATIC( EnableFileValidation )
 	if( LUA->Top( ) < 1 )
 		LUA->ArgError( 1, "number expected, got nil" );
 
-	ValidationMode mode = ValidationMode::Fixed;
+	ValidationMode mode = ValidationModeFixed;
 	if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
 	{
-		mode = LUA->GetBool( 1 ) ? ValidationMode::Fixed : ValidationMode::None;
+		mode = LUA->GetBool( 1 ) ? ValidationModeFixed : ValidationModeNone;
 	}
 	else if( LUA->IsType( 1, GarrysMod::Lua::Type::NUMBER ) )
 	{

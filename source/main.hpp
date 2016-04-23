@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <interfaces.hpp>
+#include <GarrysMod/Interfaces.hpp>
 
 #if defined DEBUG
 

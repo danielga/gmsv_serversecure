@@ -1,6 +1,6 @@
 #include <netfilter.hpp>
 #include <main.hpp>
-#include <GarrysMod/Lua/LuaInterface.h>
+#include <GarrysMod/Lua/Interface.h>
 #include <cstdint>
 #include <set>
 #include <unordered_set>
@@ -8,15 +8,14 @@
 #include <string>
 #include <tuple>
 #include <eiface.h>
-#include <filesystem_stdio.h>
-#include <gamemode.h>
+#include <basefilesystem.hpp>
 #include <iserver.h>
 #include <threadtools.h>
 #include <utlvector.h>
 #include <bitbuf.h>
 #include <steam/steamclientpublic.h>
 #include <steam/steam_gameserver.h>
-#include <interfaces.hpp>
+#include <GarrysMod/Interfaces.hpp>
 #include <symbolfinder.hpp>
 #include <game/server/iplayerinfo.h>
 
@@ -105,11 +104,11 @@ struct query_client_t
 	uint32_t count;
 };
 
-enum class PacketType
+enum PacketType
 {
-	Invalid = -1,
-	Good,
-	Info
+	PacketTypeInvalid = -1,
+	PacketTypeGood,
+	PacketTypeInfo
 };
 
 typedef CUtlVector<netsocket_t> netsockets_t;
@@ -224,107 +223,9 @@ static IVEngineServer *engine_server = nullptr;
 static IFileSystem *filesystem = nullptr;
 static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
-inline std::string GetGameDescription( )
-{
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->Pop( 1 );
-		return "";
-	}
-
-	lua->GetField( -1, "Run" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	lua->PushString( "GetGameDescription" );
-	if( lua->PCall( 1, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-	{
-		lua->Pop( 2 );
-		return "";
-	}
-
-	std::string gamedesc = lua->GetString( -1 );
-	lua->Pop( 2 );
-	return gamedesc;
-}
-
-inline std::pair<std::string, std::string> GetActiveGamemode( )
-{
-	std::string gamemode = "base", workshopid;
-
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "engine" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->Pop( 1 );
-		return std::make_pair( gamemode, workshopid );
-	}
-
-	lua->GetField( -1, "ActiveGamemode" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
-	{
-		lua->Pop( 2 );
-		return std::make_pair( gamemode, workshopid );
-	}
-
-	if( lua->PCall( 0, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-	{
-		lua->Pop( 2 );
-		return std::make_pair( gamemode, workshopid );
-	}
-
-	gamemode = lua->GetString( -1 );
-
-	lua->Pop( 1 );
-
-	lua->GetField( -1, "GetGamemodes" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
-	{
-		lua->Pop( 2 );
-		return std::make_pair( gamemode, workshopid );
-	}
-
-	if( lua->PCall( 0, 1, 0 ) != 0 || !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->Pop( 2 );
-		return std::make_pair( gamemode, workshopid );
-	}
-
-	size_t index = 1;
-	lua->PushNumber( index );
-	lua->GetTable( -2 );
-	while( lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-	{
-		lua->GetField( -1, "name" );
-		if( lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-		{
-			std::string gmname = lua->GetString( -1 );
-			if( gmname == gamemode )
-			{
-				lua->GetField( -2, "workshopid" );
-				if( lua->IsType( -1, GarrysMod::Lua::Type::STRING ) )
-					workshopid = lua->GetString( -1 );
-
-				lua->Pop( 1 );
-			}
-		}
-
-		lua->Pop( 2 );
-
-		lua->PushNumber( ++index );
-		lua->GetTable( -2 );
-	}
-
-	lua->Pop( 3 );
-	return std::make_pair( gamemode, workshopid );
-}
-
 static void BuildStaticReplyInfo( )
 {
-	reply_info.game_desc = GetGameDescription( );
+	reply_info.game_desc = gamedll->GetGameDescription( );
 
 	{
 		reply_info.game_dir.resize( 256 );
@@ -341,16 +242,16 @@ static void BuildStaticReplyInfo( )
 	reply_info.udp_port = server->GetUDPPort( );
 
 	{
-		std::string gamemode, workshopid;
-		std::tie( gamemode, workshopid ) = GetActiveGamemode( );
+		const IGamemodeSystem::Information &gamemode =
+			reinterpret_cast<CBaseFileSystem *>( filesystem )->Gamemodes( )->Active( );
 
 		reply_info.tags = " gm:";
-		reply_info.tags += gamemode;
+		reply_info.tags += gamemode.name;
 
-		if( !workshopid.empty( ) )
+		if( !gamemode.workshopid.empty( ) )
 		{
 			reply_info.tags += " gmws:";
-			reply_info.tags += workshopid;
+			reply_info.tags += gamemode.workshopid;
 		}
 	}
 
@@ -522,19 +423,19 @@ inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 		sizeof( from )
 	);
 
-	return PacketType::Invalid; // we've handled it
+	return PacketTypeInvalid; // we've handled it
 }
 
 static PacketType HandleInfoQuery( const sockaddr_in &from )
 {
 	uint32_t time = static_cast<uint32_t>( globalvars->realtime );
 	if( !CheckIPRate( from, time ) )
-		return PacketType::Invalid;
+		return PacketTypeInvalid;
 
 	if( info_cache_enabled )
 		return SendInfoCache( from, time );
 
-	return PacketType::Good;
+	return PacketTypeGood;
 }
 
 static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_in &from )
@@ -546,11 +447,11 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 			len,
 			inet_ntoa( from.sin_addr )
 		);
-		return PacketType::Invalid;
+		return PacketTypeInvalid;
 	}
 
 	if( len < 5 )
-		return PacketType::Good;
+		return PacketTypeGood;
 
 	int32_t channel = *reinterpret_cast<const int32_t *>( data );
 	if( channel == -2 )
@@ -561,11 +462,11 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 			channel,
 			inet_ntoa( from.sin_addr )
 		);
-		return PacketType::Invalid;
+		return PacketTypeInvalid;
 	}
 
 	if( channel != -1 )
-		return PacketType::Good;
+		return PacketTypeGood;
 
 	uint8_t type = *reinterpret_cast<const uint8_t *>( data + 4 );
 	if( packet_validation_enabled )
@@ -583,7 +484,7 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 						type,
 						inet_ntoa( from.sin_addr )
 					);
-					return PacketType::Invalid;
+					return PacketTypeInvalid;
 				}
 
 				if( len >= 18 && strncmp( data + 5, "statusResponse", 14 ) == 0 )
@@ -595,18 +496,18 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 						type,
 						inet_ntoa( from.sin_addr )
 					);
-					return PacketType::Invalid;
+					return PacketTypeInvalid;
 				}
 
-				return PacketType::Good;
+				return PacketTypeGood;
 
 			case 'T': // server info request
 				return len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 ?
-					PacketType::Info : PacketType::Invalid;
+					PacketTypeInfo : PacketTypeInvalid;
 
 			case 'U': // player info request
 			case 'V': // rules request
-				return len == 9 ? PacketType::Good : PacketType::Invalid;
+				return len == 9 ? PacketTypeGood : PacketTypeInvalid;
 
 			case 'q': // connection handshake init
 			case 'k': // steam auth packet
@@ -617,7 +518,7 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 					type,
 					inet_ntoa( from.sin_addr )
 				);
-				return PacketType::Good;
+				return PacketTypeGood;
 		}
 
 		DebugWarning(
@@ -627,10 +528,10 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 			type,
 			inet_ntoa( from.sin_addr )
 		);
-		return PacketType::Invalid;
+		return PacketTypeInvalid;
 	}
 
-	return type == 'T' ? PacketType::Info : PacketType::Good;
+	return type == 'T' ? PacketTypeInfo : PacketTypeGood;
 }
 
 inline bool IsAddressAllowed( const sockaddr_in &addr )
@@ -700,10 +601,10 @@ inline int32_t ReceiveAndAnalyzePacket(
 		return -1;
 
 	PacketType type = ClassifyPacket( buf, len, infrom );
-	if( type == PacketType::Info )
+	if( type == PacketTypeInfo )
 		type = HandleInfoQuery( infrom );
 
-	if( type == PacketType::Invalid )
+	if( type == PacketTypeInvalid )
 		return -1;
 
 	return len;
@@ -740,7 +641,7 @@ static int32_t Hook_recvfrom_d(
 	return len;
 }
 
-static uint32_t Hook_recvfrom_thread( void *param )
+static uint32_t Hook_recvfrom_thread( void * )
 {
 	timeval ms100 = { 0, 100000 };
 	char tempbuf[65535] = { 0 };
