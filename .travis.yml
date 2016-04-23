@@ -6,7 +6,7 @@ os:
 cache:
   directories:
     - $HOME/garrysmod_common
-    - $HOME/sourcesdk
+    - $HOME/sourcesdk-minimal
     - $HOME/premake-core
 addons:
   apt:
@@ -23,7 +23,7 @@ branches:
     - master
 install:
   - export GARRYSMOD_COMMON=$HOME/garrysmod_common
-  - export SOURCE_SDK=$HOME/sourcesdk
+  - export SOURCE_SDK=$HOME/sourcesdk-minimal
   - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
       export PREMAKE_CORE=premake-core-macosx.tar.bz2;
       export PREMAKE5=$HOME/premake-core/premake5;
