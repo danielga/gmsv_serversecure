@@ -6,9 +6,8 @@
 #include <unordered_set>
 #include <queue>
 #include <string>
-#include <tuple>
 #include <eiface.h>
-#include <basefilesystem.hpp>
+#include <filesystem_stdio.h>
 #include <iserver.h>
 #include <threadtools.h>
 #include <utlvector.h>
@@ -74,7 +73,6 @@ struct reply_info_t
 	std::string tags;
 };
 
-// VS2015 compatible (possibly gcc compatible too)
 struct gamemode_t
 {
 	bool _unk1;
@@ -243,7 +241,7 @@ static void BuildStaticReplyInfo( )
 
 	{
 		const IGamemodeSystem::Information &gamemode =
-			reinterpret_cast<CBaseFileSystem *>( filesystem )->Gamemodes( )->Active( );
+			static_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( )->Active( );
 
 		reply_info.tags = " gm:";
 		reply_info.tags += gamemode.name;
