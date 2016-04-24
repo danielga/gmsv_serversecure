@@ -59,12 +59,11 @@ install:
       cd ..;
     fi
   - if [ ! -f "premake-core/premake5" ]; then
-      echo "premake-core directory is empty, doing wget, untar, make and copy";
-      wget https://github.com/danielga/garrysmod_common/releases/download/downloadables/$PREMAKE_CORE;
-      tar -jxvf $PREMAKE_CORE;
+      echo "premake-core directory is empty, doing git clone of the remote repo and bootstrap";
+      git clone https://github.com/premake/premake-core.git;
       mv premake-core premake-core-build;
       cd premake-core-build;
-      make;
+      make -f Bootstrap.mak $PROJECT_OS;
       cd ..;
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
