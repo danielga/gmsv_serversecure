@@ -15,10 +15,10 @@ end
 
 include(gmcommon)
 
-CreateSolution("serversecure")
-	CreateProject(SERVERSIDE)
+CreateSolution({name = "serversecure", allow_debug = false})
+	CreateProject({serverside = true})
 		warnings("Default")
-		IncludeSourceSDK()
+		IncludeSDKCommon()
 		IncludeSDKTier0()
 		IncludeSDKTier1()
 		IncludeSteamAPI()
