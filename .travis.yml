@@ -79,5 +79,3 @@ deploy:
   file:
     - gmsv_serversecure_macos.dll
     - gmsv_serversecure_linux.dll
-  on:
-    tags: true
