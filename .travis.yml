@@ -60,7 +60,7 @@ install:
     fi
   - if [ ! -f "premake-core/premake5" ]; then
       echo "premake-core directory is empty, doing git clone of the remote repo and bootstrap";
-      git clone https://github.com/premake/premake-core.git;
+      git clone --recursive https://github.com/premake/premake-core.git;
       mv premake-core premake-core-build;
       cd premake-core-build;
       make -f Bootstrap.mak $PROJECT_OS;
