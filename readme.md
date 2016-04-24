@@ -18,5 +18,5 @@ This project requires [garrysmod_common][4], a framework to facilitate the creat
   [1]: http://gmodmodules.googlecode.com/svn/trunk/serverplugin_serversecure
   [2]: http://gmodmodules.googlecode.com/svn/trunk/serverplugin_serversecure2
   [3]: http://gmodmodules.googlecode.com/svn/trunk/serversecure3
-  [4]: https://bitbucket.org/danielga/garrysmod_common
+  [4]: https://github.com/danielga/garrysmod_common
   [5]: https://github.com/ValveSoftware/source-sdk-2013
