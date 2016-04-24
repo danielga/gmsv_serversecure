@@ -25,11 +25,13 @@ install:
   - export GARRYSMOD_COMMON=$HOME/garrysmod_common
   - export SOURCE_SDK=$HOME/sourcesdk-minimal
   - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
+      export BINARY_PATH=gmsv_serversecure_macos.dll;
       export PREMAKE5=$HOME/premake-core/premake5;
       export PROJECT_OS=macosx;
       export CXX=g++-4.8;
       export CC=gcc-4.8;
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
+      export BINARY_PATH=gmsv_serversecure_linux.dll;
       export PREMAKE5=$HOME/premake-core/premake5;
       export PROJECT_OS=linux;
       export CXX=g++-5;
@@ -76,6 +78,4 @@ deploy:
   skip_cleanup: true
   api_key:
     secure: ImPHIUbFzQqYf4MPKwuILsX3ptMacIB8vTwE5fsOY2RjewQqy4f9fbFa7iSvPOOKPEp56DFGzwnNHntH5JPTfEZEFLl5fbRZaf3bdMUwZNJGVqEpbKo9/lN4xMDLiUfuLZAQ4Vgt9qUG+L0pi4YEdPq/vATHNWbdUQLMT5lolRUSq/qopBouXwuZkT3GMchEZpj/Chors+N5+VuSxGwfi7Ih0U5pLpJZQCKTaV0WbwSuKhGSV2QCKlyFrTuFNFgbOu0M54MFpIYYeb1dmHSYIkjG31YWBKsQSx+ME+J7avaLRHMQFZN/suOmkJ/AIBQ7JD1NFpC2Pp8AIpP0j9f0S+L+YYv7yjjrv0Uu0aELY2AwEdhpVmY9qqmuZkQ5Zh7qUNIGbOJksHoCQ4NvBK/eOeUovyVEwIQ8Pwbbkj9tJ57U8gKRq8hwejMt04AxccuOdlHjYH4jioDOzEiV9R2NjlBzcru15I1VX+oqNWabIMRYmI9e1Paf9vrug2zX6zH7tbn3EEjZ9hgEHmGC3OZ8hBw2pVNEQxOZg5wc/piGmuzn0U5gOkSpNyMPvzNNL8Hq3w8hgQhNQZ5BKFR9I4kGwBwW+rirW2JxJAf6gvh8+nCkIDfJemCcnLlSzYQ0yquT3pddj8kZY1Z2t9IZBN8ElaiGaof+ZTv/2xeR7o+L0LU=
-  file:
-    - gmsv_serversecure_macos.dll
-    - gmsv_serversecure_linux.dll
+  file: $BINARY_PATH
