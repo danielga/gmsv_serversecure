@@ -79,7 +79,5 @@ deploy:
   file:
     - gmsv_serversecure_macos.dll
     - gmsv_serversecure_linux.dll
-  overwrite: true
   on:
     tags: true
-    repo: danielga/gmsv_serversecure
