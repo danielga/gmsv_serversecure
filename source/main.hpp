@@ -14,8 +14,8 @@ static Color __yellow( 255, 255, 0, 255 );
 
 #else
 
-#define DebugMsg
-#define DebugWarning
+#define DebugMsg( arg, ... ) (void)arg
+#define DebugWarning( arg, ... ) (void)arg
 
 #endif
 
