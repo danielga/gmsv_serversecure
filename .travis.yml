@@ -29,14 +29,10 @@ install:
       export BINARY_PATH=gmsv_serversecure_macos.dll;
       export PREMAKE5=$HOME/premake-core/premake5;
       export PROJECT_OS=macosx;
-      export CXX=g++-4.8;
-      export CC=gcc-4.8;
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
       export BINARY_PATH=gmsv_serversecure_linux.dll;
       export PREMAKE5=$HOME/premake-core/premake5;
       export PROJECT_OS=linux;
-      export CXX=g++-5;
-      export CC=gcc-5;
     fi
   - export REPO=`pwd`
   - cd $HOME
