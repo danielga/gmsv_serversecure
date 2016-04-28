@@ -27,14 +27,16 @@ install:
   - export SOURCE_SDK=$HOME/sourcesdk-minimal
   - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
       export BINARY_PATH=gmsv_serversecure_macos.dll;
-      export PREMAKE5=$HOME/premake-core/premake5;
+      export PREMAKE5="$HOME/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
+      export CXX="$CXX -std=gnu++11";
+      export CC="$CC -std=gnu11";
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
       export BINARY_PATH=gmsv_serversecure_linux.dll;
-      export PREMAKE5="$HOME/premake-core/premake5 --cc=clang";
+      export PREMAKE5=$HOME/premake-core/premake5;
       export PROJECT_OS=linux;
-      export CXX=g++-5;
-      export CC=gcc-5;
+      export CXX="g++-5 -std=gnu++11";
+      export CC="gcc-5 -std=gnu11";
     fi
   - export REPO=`pwd`
   - cd $HOME
