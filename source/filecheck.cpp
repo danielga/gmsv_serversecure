@@ -1,7 +1,8 @@
 #include <filecheck.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <cstdint>
+#include <stdint.h>
+#include <stddef.h>
 #include <string>
 #include <symbolfinder.hpp>
 #include <detours.h>

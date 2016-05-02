@@ -1,9 +1,9 @@
 #include <netfilter.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <cstdint>
+#include <stdint.h>
+#include <stddef.h>
 #include <set>
-#include <unordered_set>
 #include <queue>
 #include <string>
 #include <eiface.h>
@@ -21,14 +21,31 @@
 #if defined _WIN32
 
 #include <winsock2.h>
+#include <unordered_set>
 
-#elif defined __linux || defined __APPLE__
+typedef std::unordered_set<uint32_t> unordered_set_uint32;
+
+#elif defined __linux
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <unordered_set>
+
+typedef std::unordered_set<uint32_t> unordered_set_uint32;
+
+#elif defined defined __APPLE__
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <tr1/unordered_set>
+
+typedef std::tr1::unordered_set<uint32_t> unordered_set_uint32;
 
 #endif
 
@@ -179,10 +196,10 @@ static int32_t game_socket = -1;
 static bool packet_validation_enabled = false;
 
 static bool firewall_whitelist_enabled = false;
-static std::unordered_set<uint32_t> firewall_whitelist;
+static unordered_set_uint32 firewall_whitelist;
 
 static bool firewall_blacklist_enabled = false;
-static std::unordered_set<uint32_t> firewall_blacklist;
+static unordered_set_uint32 firewall_blacklist;
 
 static const size_t threaded_socket_max_queue = 1000;
 static bool threaded_socket_enabled = false;
@@ -715,7 +732,7 @@ LUA_FUNCTION_STATIC( RemoveWhitelistIP )
 
 LUA_FUNCTION_STATIC( ResetWhitelist )
 {
-	std::unordered_set<uint32_t>( ).swap( firewall_whitelist );
+	unordered_set_uint32( ).swap( firewall_whitelist );
 	return 0;
 }
 
@@ -744,7 +761,7 @@ LUA_FUNCTION_STATIC( RemoveBlacklistIP )
 
 LUA_FUNCTION_STATIC( ResetBlacklist )
 {
-	std::unordered_set<uint32_t>( ).swap( firewall_blacklist );
+	unordered_set_uint32( ).swap( firewall_blacklist );
 	return 0;
 }
 
