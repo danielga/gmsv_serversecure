@@ -13,10 +13,10 @@ addons:
       - ubuntu-toolchain-r-test
     packages:
       - linux-libc-dev:i386
-      - gcc-5
-      - gcc-5-multilib
-      - g++-5
-      - g++-5-multilib
+      - gcc-4.9
+      - gcc-4.9-multilib
+      - g++-4.9
+      - g++-4.9-multilib
 branches:
   only:
     - master
@@ -32,8 +32,8 @@ install:
       export BINARY_PATH=gmsv_serversecure_linux.dll;
       export PREMAKE5=$HOME/dependencies/premake-core/premake5;
       export PROJECT_OS=linux;
-      export CXX=g++-5;
-      export CC=gcc-5;
+      export CXX=g++-4.9;
+      export CC=gcc-4.9;
     fi
   - export REPO=`pwd`
   - cd $HOME/dependencies
@@ -69,6 +69,7 @@ install:
   - if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "MacOSX10.5.sdk/SDKSettings.plist" ]; then
       wget https://github.com/phracker/MacOSX-SDKs/releases/download/MacOSX10.11.sdk/MacOSX10.5.sdk.tar.xz;
       tar xf MacOSX10.5.sdk.tar.xz;
+      ln -s MacOSX10.5.sdk/usr/include/c++/4.0.0/tr1/unordered_set MacOSX10.5.sdk/usr/include/c++/4.0.0/unordered_set;
       wget https://github.com/danielga/garrysmod_common/releases/download/downloadables/cstdint -P MacOSX10.5.sdk/usr/include/c++/4.0.0;
     fi
 before_script: cd $REPO/projects && $PREMAKE5 gmake
