@@ -66,7 +66,7 @@ install:
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
     fi
-    if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "MacOSX10.5.sdk/SDKSettings.plist" ]; then
+  - if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "MacOSX10.5.sdk/SDKSettings.plist" ]; then
       wget https://github.com/phracker/MacOSX-SDKs/releases/download/MacOSX10.11.sdk/MacOSX10.5.sdk.tar.xz;
       tar xf MacOSX10.5.sdk.tar.xz;
     fi
