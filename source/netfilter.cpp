@@ -649,7 +649,7 @@ static int32_t Hook_recvfrom_d(
 	if( addrlen > sizeof( p.address ) )
 		addrlen = sizeof( p.address );
 
-	memcpy( buf, p.buffer.data( ), len );
+	memcpy( buf, &p.buffer[0], len );
 	memcpy( from, &p.address, addrlen );
 	*fromlen = p.address_size;
 
@@ -732,7 +732,8 @@ LUA_FUNCTION_STATIC( RemoveWhitelistIP )
 
 LUA_FUNCTION_STATIC( ResetWhitelist )
 {
-	unordered_set_uint32( ).swap( firewall_whitelist );
+	unordered_set_uint32 temp;
+	std::swap( firewall_whitelist, temp );
 	return 0;
 }
 
@@ -761,7 +762,8 @@ LUA_FUNCTION_STATIC( RemoveBlacklistIP )
 
 LUA_FUNCTION_STATIC( ResetBlacklist )
 {
-	unordered_set_uint32( ).swap( firewall_blacklist );
+	unordered_set_uint32 temp;
+	std::swap( firewall_blacklist, temp );
 	return 0;
 }
 
@@ -850,7 +852,7 @@ LUA_FUNCTION_STATIC( GetSamplePacket )
 	packet_sampling_queue.pop_front( );
 	LUA->PushNumber( p.address.sin_addr.s_addr );
 	LUA->PushNumber( p.address.sin_port );
-	LUA->PushString( p.buffer.data( ), p.buffer.size( ) );
+	LUA->PushString( &p.buffer[0], p.buffer.size( ) );
 	return 3;
 }
 
