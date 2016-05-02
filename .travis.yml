@@ -6,9 +6,7 @@ os:
 osx_image: xcode7.3
 cache:
   directories:
-    - $HOME/garrysmod_common
-    - $HOME/sourcesdk-minimal
-    - $HOME/premake-core
+    - $HOME/dependencies
 addons:
   apt:
     sources:
@@ -23,21 +21,22 @@ branches:
   only:
     - master
 install:
-  - export GARRYSMOD_COMMON=$HOME/garrysmod_common
-  - export SOURCE_SDK=$HOME/sourcesdk-minimal
+  - export GARRYSMOD_COMMON=$HOME/dependencies/garrysmod_common
+  - export SOURCE_SDK=$HOME/dependencies/sourcesdk-minimal
   - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
       export BINARY_PATH=gmsv_serversecure_mac.dll;
-      export PREMAKE5="$HOME/premake-core/premake5 --cc=clang";
+      export PREMAKE5="$HOME/dependencies/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
+      export MACOSX_SDK=$HOME/dependencies/MacOSX10.5.sdk;
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
       export BINARY_PATH=gmsv_serversecure_linux.dll;
-      export PREMAKE5=$HOME/premake-core/premake5;
+      export PREMAKE5=$HOME/dependencies/premake-core/premake5;
       export PROJECT_OS=linux;
       export CXX=g++-5;
       export CC=gcc-5;
     fi
   - export REPO=`pwd`
-  - cd $HOME
+  - cd $HOME/dependencies
   - if [ ! -f "garrysmod_common/premake5.lua" ]; then
       echo "garrysmod_common directory is empty, doing git clone of the remote repo";
       git clone --recursive https://github.com/danielga/garrysmod_common.git;
@@ -66,6 +65,10 @@ install:
       cd ..;
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
+    fi
+    if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "MacOSX10.5.sdk/SDKSettings.plist" ]; then
+      wget https://github.com/phracker/MacOSX-SDKs/releases/download/MacOSX10.11.sdk/MacOSX10.5.sdk.tar.xz;
+      tar xf MacOSX10.5.sdk.tar.xz;
     fi
 before_script: cd $REPO/projects && $PREMAKE5 gmake
 script:
