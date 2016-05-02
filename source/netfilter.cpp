@@ -36,7 +36,7 @@ typedef std::unordered_set<uint32_t> unordered_set_uint32;
 
 typedef std::unordered_set<uint32_t> unordered_set_uint32;
 
-#elif defined defined __APPLE__
+#elif defined __APPLE__
 
 #include <sys/types.h>
 #include <sys/socket.h>
