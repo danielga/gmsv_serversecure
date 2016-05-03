@@ -23,7 +23,7 @@
 #include <winsock2.h>
 #include <unordered_set>
 
-typedef std::unordered_set<uint32_t> unordered_set_uint32;
+typedef std::unordered_set<uint32_t> set_uint32;
 
 #elif defined __linux
 
@@ -34,7 +34,7 @@ typedef std::unordered_set<uint32_t> unordered_set_uint32;
 #include <errno.h>
 #include <unordered_set>
 
-typedef std::unordered_set<uint32_t> unordered_set_uint32;
+typedef std::unordered_set<uint32_t> set_uint32;
 
 #elif defined __APPLE__
 
@@ -43,9 +43,8 @@ typedef std::unordered_set<uint32_t> unordered_set_uint32;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
-#include <tr1/unordered_set>
 
-typedef std::tr1::unordered_set<uint32_t> unordered_set_uint32;
+typedef std::set<uint32_t> set_uint32;
 
 #endif
 
@@ -196,10 +195,10 @@ static int32_t game_socket = -1;
 static bool packet_validation_enabled = false;
 
 static bool firewall_whitelist_enabled = false;
-static unordered_set_uint32 firewall_whitelist;
+static set_uint32 firewall_whitelist;
 
 static bool firewall_blacklist_enabled = false;
-static unordered_set_uint32 firewall_blacklist;
+static set_uint32 firewall_blacklist;
 
 static const size_t threaded_socket_max_queue = 1000;
 static bool threaded_socket_enabled = false;
@@ -732,8 +731,7 @@ LUA_FUNCTION_STATIC( RemoveWhitelistIP )
 
 LUA_FUNCTION_STATIC( ResetWhitelist )
 {
-	unordered_set_uint32 temp;
-	std::swap( firewall_whitelist, temp );
+	set_uint32( ).swap( firewall_whitelist );
 	return 0;
 }
 
@@ -762,8 +760,7 @@ LUA_FUNCTION_STATIC( RemoveBlacklistIP )
 
 LUA_FUNCTION_STATIC( ResetBlacklist )
 {
-	unordered_set_uint32 temp;
-	std::swap( firewall_blacklist, temp );
+	set_uint32( ).swap( firewall_blacklist );
 	return 0;
 }
 
