@@ -3,7 +3,6 @@ compiler: gcc
 os:
   - linux
   - osx
-osx_image: xcode7.3
 cache:
   directories:
     - $HOME/dependencies
@@ -27,7 +26,8 @@ install:
       export BINARY_PATH=gmsv_serversecure_mac.dll;
       export PREMAKE5="$HOME/dependencies/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
-      export MACOSX_SDK=$HOME/dependencies/MacOSX10.5.sdk;
+      export MACOSX_SDK_VERSION=MacOSX10.6.sdk;
+      export MACOSX_SDK=$HOME/dependencies/${MACOSX_SDK_VERSION};
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
       export BINARY_PATH=gmsv_serversecure_linux.dll;
       export PREMAKE5=$HOME/dependencies/premake-core/premake5;
@@ -66,9 +66,10 @@ install:
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
     fi
-  - if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "MacOSX10.5.sdk/SDKSettings.plist" ]; then
-      wget https://github.com/phracker/MacOSX-SDKs/releases/download/MacOSX10.11.sdk/MacOSX10.5.sdk.tar.xz;
-      tar xf MacOSX10.5.sdk.tar.xz;
+  - if [[ ${TRAVIS_OS_NAME} = osx ]] && [ ! -f "${MACOSX_SDK_VERSION}/SDKSettings.plist" ]; then
+      wget https://github.com/phracker/MacOSX-SDKs/releases/download/MacOSX10.11.sdk/${MACOSX_SDK_VERSION}.tar.xz;
+      tar xf ${MACOSX_SDK_VERSION}.tar.xz;
+      rm ${MACOSX_SDK_VERSION}.tar.xz;
     fi
 before_script: cd $REPO/projects && $PREMAKE5 gmake
 script:

@@ -38,5 +38,5 @@ CreateSolution({name = "serversecure", allow_debug = false})
 		filter("system:macosx")
 			buildoptions({
 				"-mmacosx-version-min=10.5",
-				"--sysroot " .. (_OPTIONS.macosxsdk or os.getenv("MACOSX_SDK") or path.getabsolute("macosx/MacOSX10.5.sdk"))
+				"-isysroot " .. (_OPTIONS.macosxsdk or os.getenv("MACOSX_SDK") or path.getabsolute("macosx/MacOSX10.5.sdk"))
 			})
