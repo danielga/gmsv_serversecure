@@ -21,7 +21,7 @@ enum ValidationMode
 
 #if defined _WIN32
 
-static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x8B\x4D\x08\x85\xC9\x0F\x84\x2A\x2A\x2A\x2A\x80\x39";
+static const char *IsValidFileForTransfer_sig = "\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x80";
 static const size_t IsValidFileForTransfer_siglen = 16;
 
 #elif defined __linux

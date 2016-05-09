@@ -177,7 +177,7 @@ static const size_t NET_ProcessListen_siglen = 0;
 
 static const size_t net_sockets_offset = 23;
 
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x08\x89\x04\x24\xFF\x51\x28\xD9\x9D\x9C\xFE";
+static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x01\x89\x0C\x24\xFF\x50\x28\xD9\x9D\x9C\xFE";
 static const size_t IServer_siglen = 16;
 
 static const uintptr_t GetGamemode_offset = 20;
