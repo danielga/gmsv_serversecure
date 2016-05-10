@@ -131,18 +131,19 @@ typedef CUtlVector<netsocket_t> netsockets_t;
 
 typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
 
-static const char *FileSystemFactory_sym = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
-static const size_t FileSystemFactory_symlen = 14;
+static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
+static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
 
-static const char *NET_ProcessListen_sig = "\x55\x8B\xEC\x83\xEC\x34\x56\x57\x8B\x7D\x08\x8B\xF7\xC1\xE6\x04";
-static size_t NET_ProcessListen_siglen = 16;
+static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
+static const size_t g_pFullFileSystem_symlen = 0;
+
+static const char NET_ProcessListen_sig[] = "\x55\x8B\xEC\x83\xEC\x34\x56\x57\x8B\x7D\x08\x8B\xF7\xC1\xE6\x04";
+static size_t NET_ProcessListen_siglen = sizeof( NET_ProcessListen_sig ) - 1;
 
 static const size_t net_sockets_offset = 18;
 
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
-static const size_t IServer_siglen = 16;
-
-static const uintptr_t GetGamemode_offset = 12;
+static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
+static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
 static const char operating_system_char = 'w';
 
@@ -150,16 +151,19 @@ static const char operating_system_char = 'w';
 
 typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
-static const char *FileSystemFactory_sym = "@_Z17FileSystemFactoryPKcPi";
+static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
-static const char *NET_ProcessListen_sig = "@_Z17NET_ProcessListeni";
+static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
+static const size_t g_pFullFileSystem_symlen = 0;
+
+static const char NET_ProcessListen_sig[] = "@_Z17NET_ProcessListeni";
 static const size_t NET_ProcessListen_siglen = 0;
 
 static const size_t net_sockets_offset = 36;
 
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
-static const size_t IServer_siglen = 16;
+static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
+static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
 static const uintptr_t GetGamemode_offset = 12;
 
@@ -169,16 +173,19 @@ static const char operating_system_char = 'l';
 
 typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
 
-static const char *FileSystemFactory_sym = "@__Z17FileSystemFactoryPKcPi";
+static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
-static const char *NET_ProcessListen_sig = "@__Z17NET_ProcessListeni";
+static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
+static const size_t g_pFullFileSystem_symlen = 0;
+
+static const char NET_ProcessListen_sig[] = "@_Z17NET_ProcessListeni";
 static const size_t NET_ProcessListen_siglen = 0;
 
 static const size_t net_sockets_offset = 23;
 
-static const char *IServer_sig = "\x2A\x2A\x2A\x2A\x8B\x01\x89\x0C\x24\xFF\x50\x28\xD9\x9D\x9C\xFE";
-static const size_t IServer_siglen = 16;
+static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\x8B\x01\x89\x0C\x24\xFF\x50\x28\xD9\x9D\x9C\xFE";
+static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
 static const uintptr_t GetGamemode_offset = 20;
 
@@ -206,7 +213,7 @@ static bool threaded_socket_execute = true;
 static ThreadHandle_t threaded_socket_handle = nullptr;
 static std::queue<packet_t> threaded_socket_queue;
 
-static const char *default_game_version = "15.08.10";
+static const char *default_game_version = "16.02.26";
 static const uint8_t default_proto_version = 17;
 static bool info_cache_enabled = false;
 static reply_info_t reply_info;
@@ -886,12 +893,17 @@ void Initialize( lua_State *state )
 		dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
 	) );
 	if( factory == nullptr )
-		LUA->ThrowError( "unable to retrieve dedicated factory" );
+	{
+		IFileSystem **filesystem_ptr = reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
+			dedicated_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+		) );
+		filesystem = filesystem_ptr != nullptr ? *filesystem_ptr : nullptr;
+	}
+	else
+	{
+		filesystem = static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
+	}
 
-	filesystem = static_cast<IFileSystem *>( factory(
-		FILESYSTEM_INTERFACE_VERSION,
-		nullptr
-	) );
 	if( filesystem == nullptr )
 		LUA->ThrowError( "failed to initialize IFileSystem" );
 
@@ -907,7 +919,7 @@ void Initialize( lua_State *state )
 	if( server == nullptr )
 		LUA->ThrowError( "failed to locate IServer" );
 
-	uint8_t *net_sockets_pointer = reinterpret_cast<uint8_t *>( symfinder.ResolveOnBinary(
+	/*uint8_t *net_sockets_pointer = reinterpret_cast<uint8_t *>( symfinder.ResolveOnBinary(
 		global::engine_lib.c_str( ),
 		NET_ProcessListen_sig,
 		NET_ProcessListen_siglen
@@ -928,7 +940,7 @@ void Initialize( lua_State *state )
 	threaded_socket_execute = true;
 	threaded_socket_handle = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
 	if( threaded_socket_handle == nullptr )
-		LUA->ThrowError( "unable to create thread" );
+		LUA->ThrowError( "unable to create thread" );*/
 
 	BuildStaticReplyInfo( );
 

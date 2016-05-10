@@ -31,7 +31,7 @@ static const size_t IsValidFileForTransfer_siglen = 0;
 
 #elif defined __APPLE__
 
-static const char *IsValidFileForTransfer_sig = "@__ZN8CNetChan22IsValidFileForTransferEPKc";
+static const char *IsValidFileForTransfer_sig = "@_ZN8CNetChan22IsValidFileForTransferEPKc";
 static const size_t IsValidFileForTransfer_siglen = 0;
 
 #endif
