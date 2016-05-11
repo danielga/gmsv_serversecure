@@ -891,41 +891,49 @@ void Initialize( lua_State *state )
 	if( filesystem == nullptr )
 		LUA->ThrowError( "failed to initialize IFileSystem" );
 
-	IServer **pserver = reinterpret_cast<IServer **>( symfinder.ResolveOnBinary(
+#if defined __linux || defined __APPLE__
+
+	server = reinterpret_cast<IServer *>( symfinder.ResolveOnBinary(
 		global::engine_lib.c_str( ),
 		IServer_sig,
 		IServer_siglen
 	) );
-	if( pserver == nullptr )
-		LUA->ThrowError( "failed to locate IServer pointer" );
-
-#if defined __APPLE__
-
-    server = reinterpret_cast<IServer *>( pserver );
 
 #else
 
-    // TODO: Test this in Windows and Linux.
-	server = *pserver;
+	server = *reinterpret_cast<IServer **>( symfinder.ResolveOnBinary(
+		global::engine_lib.c_str( ),
+		IServer_sig,
+		IServer_siglen
+	) );
 
 #endif
 
 	if( server == nullptr )
 		LUA->ThrowError( "failed to locate IServer" );
 
-	netsockets_t **net_sockets_pointer = reinterpret_cast<netsockets_t **>( symfinder.ResolveOnBinary(
+#if defined __linux || defined __APPLE__
+
+	netsockets_t *net_sockets = reinterpret_cast<netsockets_t *>( symfinder.ResolveOnBinary(
 		global::engine_lib.c_str( ),
 		net_sockets_sig,
 		net_sockets_siglen
 	) );
-	if( net_sockets_pointer == nullptr )
-		LUA->ThrowError( "unable to sigscan for net_sockets" );
 
-	netsockets_t *net_sockets = *net_sockets_pointer;
+#else
+
+	netsockets_t *net_sockets = *reinterpret_cast<netsockets_t **>( symfinder.ResolveOnBinary(
+		global::engine_lib.c_str( ),
+		net_sockets_sig,
+		net_sockets_siglen
+	) );
+
+#endif
+
 	if( net_sockets == nullptr )
 		LUA->ThrowError( "got an invalid pointer to net_sockets" );
-    
-    game_socket = net_sockets->Element( 1 ).hUDP;
+
+	game_socket = net_sockets->Element( 1 ).hUDP;
 	if( game_socket == -1 )
 		LUA->ThrowError( "got an invalid server socket" );
 
