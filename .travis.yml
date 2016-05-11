@@ -23,7 +23,7 @@ install:
   - export GARRYSMOD_COMMON=$HOME/dependencies/garrysmod_common
   - export SOURCE_SDK=$HOME/dependencies/sourcesdk-minimal
   - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
-      export BINARY_PATH=gmsv_serversecure_mac.dll;
+      export BINARY_PATH=gmsv_serversecure_osx.dll;
       export PREMAKE5="$HOME/dependencies/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
     elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
