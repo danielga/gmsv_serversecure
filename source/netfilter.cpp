@@ -129,18 +129,14 @@ typedef CUtlVector<netsocket_t> netsockets_t;
 
 #if defined _WIN32
 
-typedef uintptr_t ( __thiscall *GetGamemode_t )( uintptr_t );
-
 static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
 static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
 
 static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
 static const size_t g_pFullFileSystem_symlen = 0;
 
-static const char NET_ProcessListen_sig[] = "\x55\x8B\xEC\x83\xEC\x34\x56\x57\x8B\x7D\x08\x8B\xF7\xC1\xE6\x04";
-static size_t NET_ProcessListen_siglen = sizeof( NET_ProcessListen_sig ) - 1;
-
-static const size_t net_sockets_offset = 18;
+static const char net_sockets_sig[] = "\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10";
+static size_t net_sockets_siglen = sizeof( net_sockets_sig ) - 1;
 
 static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
 static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
@@ -149,45 +145,33 @@ static const char operating_system_char = 'w';
 
 #elif defined __linux
 
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
-
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
 static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
 static const size_t g_pFullFileSystem_symlen = 0;
 
-static const char NET_ProcessListen_sig[] = "@_Z17NET_ProcessListeni";
-static const size_t NET_ProcessListen_siglen = 0;
+static const char net_sockets_sig[] = "@_ZL11net_sockets";
+static const size_t net_sockets_siglen = 0;
 
-static const size_t net_sockets_offset = 36;
-
-static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xF3\x0F\x10\x8D\xA8\xFE\xFF";
+static const char IServer_sig[] = "@sv";
 static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
-
-static const uintptr_t GetGamemode_offset = 12;
 
 static const char operating_system_char = 'l';
 
 #elif defined __APPLE__
 
-typedef uintptr_t ( *GetGamemode_t )( uintptr_t );
-
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
 static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
 static const size_t g_pFullFileSystem_symlen = 0;
 
-static const char NET_ProcessListen_sig[] = "@_Z17NET_ProcessListeni";
-static const size_t NET_ProcessListen_siglen = 0;
+static const char net_sockets_sig[] = "@_ZL11net_sockets";
+static const size_t net_sockets_siglen = 0;
 
-static const size_t net_sockets_offset = 23;
-
-static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\x8B\x01\x89\x0C\x24\xFF\x50\x28\xD9\x9D\x9C\xFE";
+static const char IServer_sig[] = "@sv";
 static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
-
-static const uintptr_t GetGamemode_offset = 20;
 
 static const char operating_system_char = 'm';
 
@@ -915,32 +899,40 @@ void Initialize( lua_State *state )
 	if( pserver == nullptr )
 		LUA->ThrowError( "failed to locate IServer pointer" );
 
+#if defined __APPLE__
+
+    server = reinterpret_cast<IServer *>( pserver );
+
+#else
+
+    // TODO: Test this in Windows and Linux.
 	server = *pserver;
+
+#endif
+
 	if( server == nullptr )
 		LUA->ThrowError( "failed to locate IServer" );
 
-	/*uint8_t *net_sockets_pointer = reinterpret_cast<uint8_t *>( symfinder.ResolveOnBinary(
+	netsockets_t **net_sockets_pointer = reinterpret_cast<netsockets_t **>( symfinder.ResolveOnBinary(
 		global::engine_lib.c_str( ),
-		NET_ProcessListen_sig,
-		NET_ProcessListen_siglen
+		net_sockets_sig,
+		net_sockets_siglen
 	) );
 	if( net_sockets_pointer == nullptr )
 		LUA->ThrowError( "unable to sigscan for net_sockets" );
 
-	netsockets_t *net_sockets = *reinterpret_cast<netsockets_t **>(
-		net_sockets_pointer + net_sockets_offset
-	);
+	netsockets_t *net_sockets = *net_sockets_pointer;
 	if( net_sockets == nullptr )
 		LUA->ThrowError( "got an invalid pointer to net_sockets" );
-
-	game_socket = net_sockets->Element( 1 ).hUDP;
+    
+    game_socket = net_sockets->Element( 1 ).hUDP;
 	if( game_socket == -1 )
 		LUA->ThrowError( "got an invalid server socket" );
 
 	threaded_socket_execute = true;
 	threaded_socket_handle = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
 	if( threaded_socket_handle == nullptr )
-		LUA->ThrowError( "unable to create thread" );*/
+		LUA->ThrowError( "unable to create thread" );
 
 	BuildStaticReplyInfo( );
 
