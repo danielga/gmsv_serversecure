@@ -65,7 +65,7 @@ install:
       mkdir premake-core;
       cp premake-core-build/bin/release/premake5 premake-core;
     fi
-before_script: cd "$REPO/projects" && "$PREMAKE5" gmake
+before_script: cd "$REPO/projects" && $PREMAKE5 gmake
 script:
   - cd "$PROJECT_OS/gmake"
   - make
