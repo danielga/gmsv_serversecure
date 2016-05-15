@@ -73,6 +73,8 @@ before_deploy: cd release
 deploy:
   provider: releases
   skip_cleanup: true
+  file: $BINARY_PATH
+  on:
+    tags: true
   api_key:
     secure: ImPHIUbFzQqYf4MPKwuILsX3ptMacIB8vTwE5fsOY2RjewQqy4f9fbFa7iSvPOOKPEp56DFGzwnNHntH5JPTfEZEFLl5fbRZaf3bdMUwZNJGVqEpbKo9/lN4xMDLiUfuLZAQ4Vgt9qUG+L0pi4YEdPq/vATHNWbdUQLMT5lolRUSq/qopBouXwuZkT3GMchEZpj/Chors+N5+VuSxGwfi7Ih0U5pLpJZQCKTaV0WbwSuKhGSV2QCKlyFrTuFNFgbOu0M54MFpIYYeb1dmHSYIkjG31YWBKsQSx+ME+J7avaLRHMQFZN/suOmkJ/AIBQ7JD1NFpC2Pp8AIpP0j9f0S+L+YYv7yjjrv0Uu0aELY2AwEdhpVmY9qqmuZkQ5Zh7qUNIGbOJksHoCQ4NvBK/eOeUovyVEwIQ8Pwbbkj9tJ57U8gKRq8hwejMt04AxccuOdlHjYH4jioDOzEiV9R2NjlBzcru15I1VX+oqNWabIMRYmI9e1Paf9vrug2zX6zH7tbn3EEjZ9hgEHmGC3OZ8hBw2pVNEQxOZg5wc/piGmuzn0U5gOkSpNyMPvzNNL8Hq3w8hgQhNQZ5BKFR9I4kGwBwW+rirW2JxJAf6gvh8+nCkIDfJemCcnLlSzYQ0yquT3pddj8kZY1Z2t9IZBN8ElaiGaof+ZTv/2xeR7o+L0LU=
-  file: $BINARY_PATH

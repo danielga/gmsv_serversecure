@@ -19,7 +19,7 @@ end
 
 include(gmcommon)
 
-CreateSolution({name = "serversecure", allow_debug = false})
+CreateWorkspace({name = "serversecure", allow_debug = false})
 	filter("system:macosx")
 		buildoptions("-mmacosx-version-min=10.5")
 		linkoptions("-mmacosx-version-min=10.5")
