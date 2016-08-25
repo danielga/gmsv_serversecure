@@ -177,6 +177,9 @@ static const char operating_system_char = 'm';
 
 #endif
 
+static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
+static ConVar *sv_maxvisibleplayers = nullptr;
+
 static std::string dedicated_binary = helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
 static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
 
@@ -306,7 +309,9 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteShort( appid );
 
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
-	info_cache_packet.WriteByte( reply_info.max_clients );
+	info_cache_packet.WriteByte( sv_maxvisibleplayers != nullptr ?
+		sv_maxvisibleplayers->GetInt( ) :
+		reply_info.max_clients );
 	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
 	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 	info_cache_packet.WriteByte( operating_system_char );
@@ -320,28 +325,17 @@ static void BuildReplyInfo( )
 	if( sid != nullptr )
 		steamid = sid->ConvertToUint64( );
 
-	if( reply_info.tags.empty( ) )
-	{
-		// 0x80 - port number is present
-		// 0x10 - server steamid is present
-		// 0x01 - game long appid is present
-		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x01 );
-		info_cache_packet.WriteShort( reply_info.udp_port );
-		info_cache_packet.WriteLongLong( steamid );
-		info_cache_packet.WriteLongLong( appid );
-	}
-	else
-	{
-		// 0x80 - port number is present
-		// 0x10 - server steamid is present
-		// 0x20 - tags are present
-		// 0x01 - game long appid is present
-		info_cache_packet.WriteByte( 0x80 | 0x10 | 0x20 | 0x01 );
-		info_cache_packet.WriteShort( reply_info.udp_port );
-		info_cache_packet.WriteLongLong( steamid );
+	bool notags = reply_info.tags.empty( );
+	// 0x80 - port number is present
+	// 0x10 - server steamid is present
+	// 0x20 - tags are present
+	// 0x01 - game long appid is present
+	info_cache_packet.WriteByte( 0x80 | 0x10 | ( notags ? 0x00 : 0x20 ) | 0x01 );
+	info_cache_packet.WriteShort( reply_info.udp_port );
+	info_cache_packet.WriteLongLong( steamid );
+	if ( !notags )
 		info_cache_packet.WriteString( reply_info.tags.c_str( ) );
-		info_cache_packet.WriteLongLong( appid );
-	}
+	info_cache_packet.WriteLongLong( appid );
 }
 
 inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
@@ -850,6 +844,10 @@ void Initialize( lua_State *state )
 
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
+
+	ICvar *icvar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
+	if( icvar != nullptr )
+		sv_maxvisibleplayers = icvar->FindVar( "sv_maxvisibleplayers" );
 
 	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL_VERSION_9 );
 	if( gamedll == nullptr )
