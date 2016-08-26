@@ -125,9 +125,23 @@ enum PacketType
 	PacketTypeInfo
 };
 
+class CSteamGameServerAPIContext
+{
+public:
+	ISteamGameServer *m_pSteamGameServer;
+	ISteamUtils *m_pSteamGameServerUtils;
+	ISteamNetworking *m_pSteamGameServerNetworking;
+	ISteamGameServerStats *m_pSteamGameServerStats;
+	ISteamHTTP *m_pSteamHTTP;
+	ISteamUGC *m_pSteamUGC;
+};
+
 typedef CUtlVector<netsocket_t> netsockets_t;
 
 #if defined _WIN32
+
+static const char SteamGameServerAPIContext_sym[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
+static const size_t SteamGameServerAPIContext_symlen = sizeof( SteamGameServerAPIContext_sym ) - 1;
 
 static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
 static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
@@ -145,6 +159,9 @@ static const char operating_system_char = 'w';
 
 #elif defined __linux
 
+static const char SteamGameServerAPIContext_sym[] = "@_ZL17s_SteamAPIContext";
+static const size_t SteamGameServerAPIContext_symlen = 0;
+
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
@@ -161,6 +178,9 @@ static const char operating_system_char = 'l';
 
 #elif defined __APPLE__
 
+static const char SteamGameServerAPIContext_sym[] = "@_ZL17s_SteamAPIContext";
+static const size_t SteamGameServerAPIContext_symlen = 0;
+
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
@@ -176,6 +196,9 @@ static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 static const char operating_system_char = 'm';
 
 #endif
+
+static std::string server_binary = helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
+static CSteamGameServerAPIContext *gameserver_context = nullptr;
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
 static ConVar *sv_maxvisibleplayers = nullptr;
@@ -317,7 +340,8 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( operating_system_char );
 	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
 	// if vac protected, it activates itself some time after startup
-	info_cache_packet.WriteByte( SteamGameServer_BSecure( ) );
+	ISteamGameServer *steamGS = gameserver_context->m_pSteamGameServer;
+	info_cache_packet.WriteByte( steamGS != nullptr ? steamGS->BSecure( ) : false );
 	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
 	const CSteamID *sid = engine_server->GetGameServerSteamID( );
@@ -870,6 +894,16 @@ void Initialize( lua_State *state )
 		LUA->ThrowError( "failed to load required CGlobalVars interface" );
 
 	SymbolFinder symfinder;
+
+	CSteamGameServerAPIContext **gameserver_context_pointer = reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
+		server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
+	) );
+	if( gameserver_context_pointer == nullptr )
+		LUA->ThrowError( "failed to load required CSteamGameServerAPIContext interface pointer" );
+
+	gameserver_context = *gameserver_context_pointer;
+	if( gameserver_context == nullptr )
+		LUA->ThrowError( "failed to load required CSteamGameServerAPIContext interface" );
 
 	CreateInterfaceFn factory = reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
 		dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
