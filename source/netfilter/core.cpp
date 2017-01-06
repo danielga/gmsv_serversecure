@@ -143,7 +143,7 @@ static const char operating_system_char = 'w';
 
 #elif defined __linux
 
-static const char SteamGameServerAPIContext_sym[] = "@_ZL17s_SteamAPIContext";
+static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
 
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
@@ -162,7 +162,7 @@ static const char operating_system_char = 'l';
 
 #elif defined __APPLE__
 
-static const char SteamGameServerAPIContext_sym[] = "@_ZL17s_SteamAPIContext";
+static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
 
 static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
