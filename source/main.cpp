@@ -1,5 +1,5 @@
 #include <main.hpp>
-#include <netfilter.hpp>
+#include <netfilter/core.hpp>
 #include <filecheck.hpp>
 #include <GarrysMod/Lua/Interface.h>
 
@@ -36,11 +36,11 @@ static void PreInitialize( lua_State *state )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.3.9" );
+	LUA->PushString( "serversecure 1.4.0" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10309 );
+	LUA->PushNumber( 10400 );
 	LUA->SetField( -2, "VersionNum" );
 }
 

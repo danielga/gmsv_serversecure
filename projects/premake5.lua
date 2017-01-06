@@ -32,3 +32,7 @@ CreateWorkspace({name = "serversecure", allow_debug = false})
 		IncludeSteamAPI()
 		IncludeDetouring()
 		IncludeScanning()
+		files({
+			"../source/netfilter/*.cpp",
+			"../source/netfilter/*.hpp"
+		})

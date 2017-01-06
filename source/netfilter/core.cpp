@@ -1,4 +1,5 @@
-#include <netfilter.hpp>
+#include <netfilter/core.hpp>
+#include <netfilter/clientmanager.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
 #include <stdint.h>
@@ -99,23 +100,6 @@ struct gamemode_t
 	std::string filters;
 	std::string base;
 	std::string workshopid;
-};
-
-struct query_client_t
-{
-	bool operator<( const query_client_t &rhs ) const
-	{
-		return address < rhs.address;
-	}
-
-	bool operator==( const query_client_t &rhs ) const
-	{
-		return address == rhs.address;
-	}
-
-	uint32_t address;
-	uint32_t last_reset;
-	uint32_t count;
 };
 
 enum PacketType
@@ -232,16 +216,7 @@ static bf_write info_cache_packet( info_cache_buffer, sizeof( info_cache_buffer 
 static uint32_t info_cache_last_update = 0;
 static uint32_t info_cache_time = 5;
 
-static const uint32_t query_limiter_max_clients = 4096;
-static const uint32_t query_limiter_prune_clients = query_limiter_max_clients * 2 / 3;
-static const uint32_t query_limiter_timeout_clients = 120;
-static bool query_limiter_enabled = false;
-static uint32_t query_limiter_global_count = 0;
-static uint32_t query_limiter_global_last_reset = 0;
-static std::set<query_client_t> query_limiter_clients;
-static uint32_t query_limiter_max_window = 60;
-static uint32_t query_limiter_max_sec = 1;
-static uint32_t query_limiter_global_max_sec = 50;
+static ClientManager client_manager;
 
 static const size_t packet_sampling_max_queue = 10;
 static bool packet_sampling_enabled = false;
@@ -362,73 +337,6 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteLongLong( appid );
 }
 
-inline bool CheckIPRate( const sockaddr_in &from, uint32_t time )
-{
-	if( !query_limiter_enabled )
-		return true;
-
-	if( query_limiter_clients.size( ) >= query_limiter_max_clients )
-		for( auto it = query_limiter_clients.begin( ); it != query_limiter_clients.end( ); ++it )
-		{
-			const query_client_t &client = *it;
-			if( client.last_reset - time >= query_limiter_timeout_clients && client.address != from.sin_addr.s_addr )
-			{
-				query_limiter_clients.erase( it );
-
-				if( query_limiter_clients.size( ) <= query_limiter_prune_clients )
-					break;
-			}
-		}
-
-	query_client_t client = { from.sin_addr.s_addr, time, 1 };
-	auto it = query_limiter_clients.find( client );
-	if( it != query_limiter_clients.end( ) )
-	{
-		client = *it;
-		query_limiter_clients.erase( it );
-
-		if( time - client.last_reset >= query_limiter_max_window )
-		{
-			client.last_reset = time;
-		}
-		else
-		{
-			++client.count;
-			if( client.count / query_limiter_max_window >= query_limiter_max_sec )
-			{
-				query_limiter_clients.insert( client );
-				DebugWarning(
-					"[ServerSecure] %s reached its query limit!\n",
-					inet_ntoa( from.sin_addr )
-				);
-				return false;
-			}
-		}
-	}
-
-	query_limiter_clients.insert( client );
-
-	if( time - query_limiter_global_last_reset > query_limiter_max_window )
-	{
-		query_limiter_global_last_reset = time;
-		query_limiter_global_count = 1;
-	}
-	else
-	{
-		++query_limiter_global_count;
-		if( query_limiter_global_count / query_limiter_max_window >= query_limiter_global_max_sec )
-		{
-			DebugWarning(
-				"[ServerSecure] %s reached the global query limit!\n",
-				inet_ntoa( from.sin_addr )
-			);
-			return false;
-		}
-	}
-
-	return true;
-}
-
 inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 {
 	if( time - info_cache_last_update >= info_cache_time )
@@ -452,7 +360,7 @@ inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 static PacketType HandleInfoQuery( const sockaddr_in &from )
 {
 	uint32_t time = static_cast<uint32_t>( globalvars->realtime );
-	if( !CheckIPRate( from, time ) )
+	if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
 		return PacketTypeInvalid;
 
 	if( info_cache_enabled )
@@ -813,28 +721,28 @@ LUA_FUNCTION_STATIC( RefreshInfoCache )
 LUA_FUNCTION_STATIC( EnableQueryLimiter )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-	query_limiter_enabled = LUA->GetBool( 1 );
+	client_manager.SetState( LUA->GetBool( 1 ) );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( SetMaxQueriesWindow )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	query_limiter_max_window = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
+	client_manager.SetMaxQueriesWindow( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( SetMaxQueriesPerSecond )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	query_limiter_max_sec = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
+	client_manager.SetMaxQueriesPerSecond( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 	return 0;
 }
 
 LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
-	query_limiter_global_max_sec = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
+	client_manager.SetGlobalMaxQueriesPerSecond( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 	return 0;
 }
 
