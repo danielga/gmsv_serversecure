@@ -845,8 +845,8 @@ void Initialize( lua_State *state )
 	if( server == nullptr )
 		LUA->ThrowError( "failed to locate IServer" );
 
-	netsockets_t *net_sockets = 
-		
+	netsockets_t *net_sockets =
+
 #if defined __linux || defined __APPLE__
 
 		reinterpret_cast<netsockets_t *>
@@ -883,6 +883,8 @@ int32_t PostInitialize( lua_State *state )
 	{
 		SymbolFinder symfinder;
 
+#if defined _WIN32
+
 		CSteamGameServerAPIContext **gameserver_context_pointer = reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
 			server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
 		) );
@@ -894,6 +896,15 @@ int32_t PostInitialize( lua_State *state )
 		}
 
 		gameserver_context = *gameserver_context_pointer;
+
+#else
+
+		gameserver_context = reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
+			server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
+		) );
+
+#endif
+
 		if( gameserver_context == nullptr )
 		{
 			LUA->PushNil( );
