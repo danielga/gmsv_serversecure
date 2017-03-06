@@ -34,6 +34,10 @@ LUA_FUNCTION_STATIC( PostInitialize )
 {
 	if( !post_initialized )
 	{
+		LUA->GetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
+		if( !LUA->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+			LUA->ThrowError( "EVEN NOW, THE EVIL SEED OF WHAT YOU'VE DONE GERMINATES WITHIN YOU" );
+
 		int32_t nrets = netfilter::PostInitialize( state );
 		if( nrets != 0 )
 			return nrets;
@@ -56,11 +60,11 @@ static void PreInitialize( lua_State *state )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.5.0" );
+	LUA->PushString( "serversecure 1.5.1" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10500 );
+	LUA->PushNumber( 10501 );
 	LUA->SetField( -2, "VersionNum" );
 
 	LUA->PushCFunction( PostInitialize );
