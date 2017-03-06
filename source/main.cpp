@@ -28,6 +28,26 @@ namespace global
 
 SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
 std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
+static bool post_initialized = false;
+
+LUA_FUNCTION_STATIC( PostInitialize )
+{
+	if( !post_initialized )
+	{
+		int32_t nrets = netfilter::PostInitialize( state );
+		if( nrets != 0 )
+			return nrets;
+
+		nrets = filecheck::PostInitialize( state );
+		if( nrets != 0 )
+			return nrets;
+
+		post_initialized = true;
+	}
+
+	LUA->PushBool( true );
+	return 1;
+}
 
 static void PreInitialize( lua_State *state )
 {
@@ -36,12 +56,15 @@ static void PreInitialize( lua_State *state )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.4.0" );
+	LUA->PushString( "serversecure 1.5.0" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10400 );
+	LUA->PushNumber( 10500 );
 	LUA->SetField( -2, "VersionNum" );
+
+	LUA->PushCFunction( PostInitialize );
+	LUA->SetField( -2, "PostInitialize" );
 }
 
 static void Initialize( lua_State *state )

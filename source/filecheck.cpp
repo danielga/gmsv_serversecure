@@ -187,7 +187,7 @@ inline bool SetDetourStatus( ValidationMode mode )
 LUA_FUNCTION_STATIC( EnableFileValidation )
 {
 	if( LUA->Top( ) < 1 )
-		LUA->ArgError( 1, "number expected, got nil" );
+		LUA->ArgError( 1, "boolean or number expected, got nil" );
 
 	ValidationMode mode = ValidationModeFixed;
 	if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
@@ -204,7 +204,7 @@ LUA_FUNCTION_STATIC( EnableFileValidation )
 	}
 	else
 	{
-		LUA->ArgError( 1, "number expected" );
+		LUA->ArgError( 1, "boolean or number expected" );
 	}
 
 	LUA->PushBool( SetDetourStatus( mode ) );
@@ -233,9 +233,14 @@ void Initialize( lua_State *state )
 	) );
 	if( IsValidFileForTransfer == nullptr )
 		LUA->ThrowError( "unable to sigscan for CNetChan::IsValidFileForTransfer" );
+}
 
+int32_t PostInitialize( lua_State *state )
+{
 	LUA->PushCFunction( EnableFileValidation );
 	LUA->SetField( -2, "EnableFileValidation" );
+
+	return 0;
 }
 
 void Deinitialize( lua_State * )

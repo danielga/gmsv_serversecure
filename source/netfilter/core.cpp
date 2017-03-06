@@ -315,7 +315,7 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteByte( operating_system_char );
 	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
 	// if vac protected, it activates itself some time after startup
-	ISteamGameServer *steamGS = gameserver_context->m_pSteamGameServer;
+	ISteamGameServer *steamGS = gameserver_context != nullptr ? gameserver_context->m_pSteamGameServer : nullptr;
 	info_cache_packet.WriteByte( steamGS != nullptr ? steamGS->BSecure( ) : false );
 	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
@@ -468,10 +468,14 @@ static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_
 inline bool IsAddressAllowed( const sockaddr_in &addr )
 {
 	return
-		( !firewall_whitelist_enabled ||
-		firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( ) ) &&
-		( !firewall_blacklist_enabled ||
-			firewall_blacklist.find( addr.sin_addr.s_addr ) == firewall_blacklist.end( ) );
+		(
+			!firewall_whitelist_enabled ||
+			firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( )
+		) &&
+		(
+			!firewall_blacklist_enabled ||
+			firewall_blacklist.find( addr.sin_addr.s_addr ) == firewall_blacklist.end( )
+		);
 }
 
 inline int32_t HandleNetError( int32_t value )
@@ -803,16 +807,6 @@ void Initialize( lua_State *state )
 
 	SymbolFinder symfinder;
 
-	CSteamGameServerAPIContext **gameserver_context_pointer = reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
-		server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
-	) );
-	if( gameserver_context_pointer == nullptr )
-		LUA->ThrowError( "failed to load required CSteamGameServerAPIContext interface pointer" );
-
-	gameserver_context = *gameserver_context_pointer;
-	if( gameserver_context == nullptr )
-		LUA->ThrowError( "failed to load required CSteamGameServerAPIContext interface" );
-
 	CreateInterfaceFn factory = reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
 		dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
 	) );
@@ -831,45 +825,43 @@ void Initialize( lua_State *state )
 	if( filesystem == nullptr )
 		LUA->ThrowError( "failed to initialize IFileSystem" );
 
+	server =
+
 #if defined __linux || defined __APPLE__
 
-	server = reinterpret_cast<IServer *>( symfinder.ResolveOnBinary(
-		global::engine_lib.c_str( ),
-		IServer_sig,
-		IServer_siglen
-	) );
+		reinterpret_cast<IServer *>
 
 #else
 
-	server = *reinterpret_cast<IServer **>( symfinder.ResolveOnBinary(
-		global::engine_lib.c_str( ),
-		IServer_sig,
-		IServer_siglen
-	) );
+		*reinterpret_cast<IServer **>
 
 #endif
 
+		( symfinder.ResolveOnBinary(
+			global::engine_lib.c_str( ),
+			IServer_sig,
+			IServer_siglen
+		) );
 	if( server == nullptr )
 		LUA->ThrowError( "failed to locate IServer" );
 
+	netsockets_t *net_sockets = 
+		
 #if defined __linux || defined __APPLE__
 
-	netsockets_t *net_sockets = reinterpret_cast<netsockets_t *>( symfinder.ResolveOnBinary(
-		global::engine_lib.c_str( ),
-		net_sockets_sig,
-		net_sockets_siglen
-	) );
+		reinterpret_cast<netsockets_t *>
 
 #else
 
-	netsockets_t *net_sockets = *reinterpret_cast<netsockets_t **>( symfinder.ResolveOnBinary(
-		global::engine_lib.c_str( ),
-		net_sockets_sig,
-		net_sockets_siglen
-	) );
+		*reinterpret_cast<netsockets_t **>
 
 #endif
 
+		( symfinder.ResolveOnBinary(
+			global::engine_lib.c_str( ),
+			net_sockets_sig,
+			net_sockets_siglen
+		) );
 	if( net_sockets == nullptr )
 		LUA->ThrowError( "got an invalid pointer to net_sockets" );
 
@@ -883,63 +875,93 @@ void Initialize( lua_State *state )
 		LUA->ThrowError( "unable to create thread" );
 
 	BuildStaticReplyInfo( );
+}
 
-	LUA->PushCFunction( EnableFirewallWhitelist );
-	LUA->SetField( -2, "EnableFirewallWhitelist" );
+int32_t PostInitialize( lua_State *state )
+{
+	if( gameserver_context == nullptr )
+	{
+		SymbolFinder symfinder;
 
-	LUA->PushCFunction( AddWhitelistIP );
-	LUA->SetField( -2, "AddWhitelistIP" );
+		CSteamGameServerAPIContext **gameserver_context_pointer = reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
+			server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
+		) );
+		if( gameserver_context_pointer == nullptr )
+		{
+			LUA->PushNil( );
+			LUA->PushString( "Failed to load required CSteamGameServerAPIContext interface pointer." );
+			return 2;
+		}
 
-	LUA->PushCFunction( RemoveWhitelistIP );
-	LUA->SetField( -2, "RemoveWhitelistIP" );
+		gameserver_context = *gameserver_context_pointer;
+		if( gameserver_context == nullptr )
+		{
+			LUA->PushNil( );
+			LUA->PushString( "Failed to load required CSteamGameServerAPIContext interface." );
+			return 2;
+		}
 
-	LUA->PushCFunction( ResetWhitelist );
-	LUA->SetField( -2, "ResetWhitelist" );
+		BuildStaticReplyInfo( );
 
-	LUA->PushCFunction( EnableFirewallBlacklist );
-	LUA->SetField( -2, "EnableFirewallBlacklist" );
+		LUA->PushCFunction( EnableFirewallWhitelist );
+		LUA->SetField( -2, "EnableFirewallWhitelist" );
 
-	LUA->PushCFunction( AddBlacklistIP );
-	LUA->SetField( -2, "AddBlacklistIP" );
+		LUA->PushCFunction( AddWhitelistIP );
+		LUA->SetField( -2, "AddWhitelistIP" );
 
-	LUA->PushCFunction( RemoveBlacklistIP );
-	LUA->SetField( -2, "RemoveBlacklistIP" );
+		LUA->PushCFunction( RemoveWhitelistIP );
+		LUA->SetField( -2, "RemoveWhitelistIP" );
 
-	LUA->PushCFunction( ResetBlacklist );
-	LUA->SetField( -2, "ResetBlacklist" );
+		LUA->PushCFunction( ResetWhitelist );
+		LUA->SetField( -2, "ResetWhitelist" );
 
-	LUA->PushCFunction( EnablePacketValidation );
-	LUA->SetField( -2, "EnablePacketValidation" );
+		LUA->PushCFunction( EnableFirewallBlacklist );
+		LUA->SetField( -2, "EnableFirewallBlacklist" );
 
-	LUA->PushCFunction( EnableThreadedSocket );
-	LUA->SetField( -2, "EnableThreadedSocket" );
+		LUA->PushCFunction( AddBlacklistIP );
+		LUA->SetField( -2, "AddBlacklistIP" );
 
-	LUA->PushCFunction( EnableInfoCache );
-	LUA->SetField( -2, "EnableInfoCache" );
+		LUA->PushCFunction( RemoveBlacklistIP );
+		LUA->SetField( -2, "RemoveBlacklistIP" );
 
-	LUA->PushCFunction( SetInfoCacheTime );
-	LUA->SetField( -2, "SetInfoCacheTime" );
+		LUA->PushCFunction( ResetBlacklist );
+		LUA->SetField( -2, "ResetBlacklist" );
 
-	LUA->PushCFunction( RefreshInfoCache );
-	LUA->SetField( -2, "RefreshInfoCache" );
+		LUA->PushCFunction( EnablePacketValidation );
+		LUA->SetField( -2, "EnablePacketValidation" );
 
-	LUA->PushCFunction( EnableQueryLimiter );
-	LUA->SetField( -2, "EnableQueryLimiter" );
+		LUA->PushCFunction( EnableThreadedSocket );
+		LUA->SetField( -2, "EnableThreadedSocket" );
 
-	LUA->PushCFunction( SetMaxQueriesWindow );
-	LUA->SetField( -2, "SetMaxQueriesWindow" );
+		LUA->PushCFunction( EnableInfoCache );
+		LUA->SetField( -2, "EnableInfoCache" );
 
-	LUA->PushCFunction( SetMaxQueriesPerSecond );
-	LUA->SetField( -2, "SetMaxQueriesPerSecond" );
+		LUA->PushCFunction( SetInfoCacheTime );
+		LUA->SetField( -2, "SetInfoCacheTime" );
 
-	LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
-	LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
+		LUA->PushCFunction( RefreshInfoCache );
+		LUA->SetField( -2, "RefreshInfoCache" );
 
-	LUA->PushCFunction( EnablePacketSampling );
-	LUA->SetField( -2, "EnablePacketSampling" );
+		LUA->PushCFunction( EnableQueryLimiter );
+		LUA->SetField( -2, "EnableQueryLimiter" );
 
-	LUA->PushCFunction( GetSamplePacket );
-	LUA->SetField( -2, "GetSamplePacket" );
+		LUA->PushCFunction( SetMaxQueriesWindow );
+		LUA->SetField( -2, "SetMaxQueriesWindow" );
+
+		LUA->PushCFunction( SetMaxQueriesPerSecond );
+		LUA->SetField( -2, "SetMaxQueriesPerSecond" );
+
+		LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
+		LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
+
+		LUA->PushCFunction( EnablePacketSampling );
+		LUA->SetField( -2, "EnablePacketSampling" );
+
+		LUA->PushCFunction( GetSamplePacket );
+		LUA->SetField( -2, "GetSamplePacket" );
+	}
+
+	return 0;
 }
 
 void Deinitialize( lua_State * )

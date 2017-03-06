@@ -1,5 +1,11 @@
-hook.Add("Initialize", "serversecure initialization", function()
-	require("serversecure")
+require("serversecure")
+
+timer.Create("serversecure.PostInitialization", 1, 0, function()
+	if not serversecure.PostInitialize() then
+		return
+	end
+
+	timer.Remove("serversecure.PostInitialization")
 
 	--serversecure.EnableFirewallWhitelist(boolean) -- enable "firewall" whitelist, any client not in the whitelist doesn't see the server
 	--serversecure.AddWhitelistIP(ip_in_integer_format) -- add an IP to the whitelist
