@@ -90,18 +90,6 @@ struct reply_info_t
 	std::string tags;
 };
 
-struct gamemode_t
-{
-	bool _unk1;
-	bool _unk2;
-	uint16_t _pad;
-	std::string name;
-	std::string path;
-	std::string filters;
-	std::string base;
-	std::string workshopid;
-};
-
 enum PacketType
 {
 	PacketTypeInvalid = -1,
@@ -207,7 +195,7 @@ static bool threaded_socket_execute = true;
 static ThreadHandle_t threaded_socket_handle = nullptr;
 static std::queue<packet_t> threaded_socket_queue;
 
-static const char *default_game_version = "16.02.26";
+static const char *default_game_version = "16.12.01";
 static const uint8_t default_proto_version = 17;
 static bool info_cache_enabled = false;
 static reply_info_t reply_info;
