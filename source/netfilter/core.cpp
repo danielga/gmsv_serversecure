@@ -899,66 +899,66 @@ int32_t PostInitialize( lua_State *state )
 			LUA->PushString( "Failed to load required CSteamGameServerAPIContext interface." );
 			return 2;
 		}
-
-		BuildStaticReplyInfo( );
-
-		LUA->PushCFunction( EnableFirewallWhitelist );
-		LUA->SetField( -2, "EnableFirewallWhitelist" );
-
-		LUA->PushCFunction( AddWhitelistIP );
-		LUA->SetField( -2, "AddWhitelistIP" );
-
-		LUA->PushCFunction( RemoveWhitelistIP );
-		LUA->SetField( -2, "RemoveWhitelistIP" );
-
-		LUA->PushCFunction( ResetWhitelist );
-		LUA->SetField( -2, "ResetWhitelist" );
-
-		LUA->PushCFunction( EnableFirewallBlacklist );
-		LUA->SetField( -2, "EnableFirewallBlacklist" );
-
-		LUA->PushCFunction( AddBlacklistIP );
-		LUA->SetField( -2, "AddBlacklistIP" );
-
-		LUA->PushCFunction( RemoveBlacklistIP );
-		LUA->SetField( -2, "RemoveBlacklistIP" );
-
-		LUA->PushCFunction( ResetBlacklist );
-		LUA->SetField( -2, "ResetBlacklist" );
-
-		LUA->PushCFunction( EnablePacketValidation );
-		LUA->SetField( -2, "EnablePacketValidation" );
-
-		LUA->PushCFunction( EnableThreadedSocket );
-		LUA->SetField( -2, "EnableThreadedSocket" );
-
-		LUA->PushCFunction( EnableInfoCache );
-		LUA->SetField( -2, "EnableInfoCache" );
-
-		LUA->PushCFunction( SetInfoCacheTime );
-		LUA->SetField( -2, "SetInfoCacheTime" );
-
-		LUA->PushCFunction( RefreshInfoCache );
-		LUA->SetField( -2, "RefreshInfoCache" );
-
-		LUA->PushCFunction( EnableQueryLimiter );
-		LUA->SetField( -2, "EnableQueryLimiter" );
-
-		LUA->PushCFunction( SetMaxQueriesWindow );
-		LUA->SetField( -2, "SetMaxQueriesWindow" );
-
-		LUA->PushCFunction( SetMaxQueriesPerSecond );
-		LUA->SetField( -2, "SetMaxQueriesPerSecond" );
-
-		LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
-		LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
-
-		LUA->PushCFunction( EnablePacketSampling );
-		LUA->SetField( -2, "EnablePacketSampling" );
-
-		LUA->PushCFunction( GetSamplePacket );
-		LUA->SetField( -2, "GetSamplePacket" );
 	}
+
+	BuildStaticReplyInfo( );
+
+	LUA->PushCFunction( EnableFirewallWhitelist );
+	LUA->SetField( -2, "EnableFirewallWhitelist" );
+
+	LUA->PushCFunction( AddWhitelistIP );
+	LUA->SetField( -2, "AddWhitelistIP" );
+
+	LUA->PushCFunction( RemoveWhitelistIP );
+	LUA->SetField( -2, "RemoveWhitelistIP" );
+
+	LUA->PushCFunction( ResetWhitelist );
+	LUA->SetField( -2, "ResetWhitelist" );
+
+	LUA->PushCFunction( EnableFirewallBlacklist );
+	LUA->SetField( -2, "EnableFirewallBlacklist" );
+
+	LUA->PushCFunction( AddBlacklistIP );
+	LUA->SetField( -2, "AddBlacklistIP" );
+
+	LUA->PushCFunction( RemoveBlacklistIP );
+	LUA->SetField( -2, "RemoveBlacklistIP" );
+
+	LUA->PushCFunction( ResetBlacklist );
+	LUA->SetField( -2, "ResetBlacklist" );
+
+	LUA->PushCFunction( EnablePacketValidation );
+	LUA->SetField( -2, "EnablePacketValidation" );
+
+	LUA->PushCFunction( EnableThreadedSocket );
+	LUA->SetField( -2, "EnableThreadedSocket" );
+
+	LUA->PushCFunction( EnableInfoCache );
+	LUA->SetField( -2, "EnableInfoCache" );
+
+	LUA->PushCFunction( SetInfoCacheTime );
+	LUA->SetField( -2, "SetInfoCacheTime" );
+
+	LUA->PushCFunction( RefreshInfoCache );
+	LUA->SetField( -2, "RefreshInfoCache" );
+
+	LUA->PushCFunction( EnableQueryLimiter );
+	LUA->SetField( -2, "EnableQueryLimiter" );
+
+	LUA->PushCFunction( SetMaxQueriesWindow );
+	LUA->SetField( -2, "SetMaxQueriesWindow" );
+
+	LUA->PushCFunction( SetMaxQueriesPerSecond );
+	LUA->SetField( -2, "SetMaxQueriesPerSecond" );
+
+	LUA->PushCFunction( SetGlobalMaxQueriesPerSecond );
+	LUA->SetField( -2, "SetGlobalMaxQueriesPerSecond" );
+
+	LUA->PushCFunction( EnablePacketSampling );
+	LUA->SetField( -2, "EnablePacketSampling" );
+
+	LUA->PushCFunction( GetSamplePacket );
+	LUA->SetField( -2, "GetSamplePacket" );
 
 	return 0;
 }
