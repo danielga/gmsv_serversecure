@@ -762,7 +762,7 @@ LUA_FUNCTION_STATIC( GetSamplePacket )
 	return 3;
 }
 
-void Initialize( lua_State *state )
+void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	lua = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
 
@@ -865,7 +865,7 @@ void Initialize( lua_State *state )
 	BuildStaticReplyInfo( );
 }
 
-int32_t PostInitialize( lua_State *state )
+int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	if( gameserver_context == nullptr )
 	{
@@ -963,7 +963,7 @@ int32_t PostInitialize( lua_State *state )
 	return 0;
 }
 
-void Deinitialize( lua_State * )
+void Deinitialize( GarrysMod::Lua::ILuaBase * )
 {
 	if( threaded_socket_handle != nullptr )
 	{

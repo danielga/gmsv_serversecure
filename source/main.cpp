@@ -38,11 +38,11 @@ LUA_FUNCTION_STATIC( PostInitialize )
 		if( !LUA->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
 			LUA->ThrowError( "EVEN NOW, THE EVIL SEED OF WHAT YOU'VE DONE GERMINATES WITHIN YOU" );
 
-		int32_t nrets = netfilter::PostInitialize( state );
+		int32_t nrets = netfilter::PostInitialize( LUA );
 		if( nrets != 0 )
 			return nrets;
 
-		nrets = filecheck::PostInitialize( state );
+		nrets = filecheck::PostInitialize( LUA );
 		if( nrets != 0 )
 			return nrets;
 
@@ -53,18 +53,18 @@ LUA_FUNCTION_STATIC( PostInitialize )
 	return 1;
 }
 
-static void PreInitialize( lua_State *state )
+static void PreInitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	if( !engine_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get engine factory" );
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.5.6" );
+	LUA->PushString( "serversecure 1.5.7" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10506 );
+	LUA->PushNumber( 10507 );
 	LUA->SetField( -2, "VersionNum" );
 
 	LUA->PushCFunction( PostInitialize );
@@ -73,12 +73,12 @@ static void PreInitialize( lua_State *state )
 	post_initialized = false;
 }
 
-static void Initialize( lua_State *state )
+static void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	LUA->SetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
 }
 
-static void Deinitialize( lua_State *state )
+static void Deinitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	LUA->PushNil( );
 	LUA->SetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
@@ -88,17 +88,17 @@ static void Deinitialize( lua_State *state )
 
 GMOD_MODULE_OPEN( )
 {
-	global::PreInitialize( state );
-	netfilter::Initialize( state );
-	filecheck::Initialize( state );
-	global::Initialize( state );
+	global::PreInitialize( LUA );
+	netfilter::Initialize( LUA );
+	filecheck::Initialize( LUA );
+	global::Initialize( LUA );
 	return 1;
 }
 
 GMOD_MODULE_CLOSE( )
 {
-	filecheck::Deinitialize( state );
-	netfilter::Deinitialize( state );
-	global::Deinitialize( state );
+	filecheck::Deinitialize( LUA );
+	netfilter::Deinitialize( LUA );
+	global::Deinitialize( LUA );
 	return 0;
 }

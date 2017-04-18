@@ -2,13 +2,19 @@
 
 #include <stdint.h>
 
-struct lua_State;
+namespace GarrysMod
+{
+	namespace Lua
+	{
+		class ILuaBase;
+	}
+}
 
 namespace netfilter
 {
 
-void Initialize( lua_State *state );
-int32_t PostInitialize( lua_State *state );
-void Deinitialize( lua_State *state );
+void Initialize( GarrysMod::Lua::ILuaBase *LUA );
+int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA );
+void Deinitialize( GarrysMod::Lua::ILuaBase *LUA );
 
 }

@@ -211,7 +211,7 @@ LUA_FUNCTION_STATIC( EnableFileValidation )
 	return 1;
 }
 
-void Initialize( lua_State *state )
+void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	lua_interface = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
 
@@ -235,7 +235,7 @@ void Initialize( lua_State *state )
 		LUA->ThrowError( "unable to sigscan for CNetChan::IsValidFileForTransfer" );
 }
 
-int32_t PostInitialize( lua_State *state )
+int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	LUA->PushCFunction( EnableFileValidation );
 	LUA->SetField( -2, "EnableFileValidation" );
@@ -243,7 +243,7 @@ int32_t PostInitialize( lua_State *state )
 	return 0;
 }
 
-void Deinitialize( lua_State * )
+void Deinitialize( GarrysMod::Lua::ILuaBase * )
 {
 	if( IsValidFileForTransfer != nullptr )
 	{
