@@ -100,12 +100,15 @@ enum PacketType
 class CSteamGameServerAPIContext
 {
 public:
+	ISteamClient *m_pSteamClient;
 	ISteamGameServer *m_pSteamGameServer;
 	ISteamUtils *m_pSteamGameServerUtils;
 	ISteamNetworking *m_pSteamGameServerNetworking;
 	ISteamGameServerStats *m_pSteamGameServerStats;
 	ISteamHTTP *m_pSteamHTTP;
+	ISteamInventory *m_pSteamInventory;
 	ISteamUGC *m_pSteamUGC;
+	ISteamApps *m_pSteamApps;
 };
 
 typedef CUtlVector<netsocket_t> netsockets_t;
