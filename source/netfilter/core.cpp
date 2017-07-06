@@ -586,7 +586,9 @@ static uint32_t Hook_recvfrom_thread( void * )
 
 		FD_ZERO( &readables );
 		FD_SET( game_socket, &readables );
-		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 || !FD_ISSET( game_socket, &readables ) )
+		int res = select( game_socket + 1, &readables, nullptr, nullptr, &ms100 );
+		ms100.tv_usec = 100000;
+		if( res == -1 || !FD_ISSET( game_socket, &readables ) )
 			continue;
 
 		packet_t p;
