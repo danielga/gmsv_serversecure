@@ -60,11 +60,11 @@ static void PreInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.5.8" );
+	LUA->PushString( "serversecure 1.5.9" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10508 );
+	LUA->PushNumber( 10509 );
 	LUA->SetField( -2, "VersionNum" );
 
 	LUA->PushCFunction( PostInitialize );
