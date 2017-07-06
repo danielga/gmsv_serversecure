@@ -1,6 +1,7 @@
 #include <filecheck.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
+#include <GarrysMod/Lua/LuaInterface.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string>

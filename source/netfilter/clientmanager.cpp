@@ -53,10 +53,10 @@ namespace netfilter
 			{
 				DebugWarning(
 					"[ServerSecure] %d.%d.%d.%d reached the global query limit!\n",
-					( ip >> 24 ) & 0xFF,
-					( ip >> 16 ) & 0xFF,
-					( ip >> 8 ) & 0xFF,
-					ip & 0xFF
+					( from >> 24 ) & 0xFF,
+					( from >> 16 ) & 0xFF,
+					( from >> 8 ) & 0xFF,
+					from & 0xFF
 				);
 				return false;
 			}

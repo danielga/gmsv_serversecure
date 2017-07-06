@@ -25,10 +25,10 @@ namespace netfilter
 			{
 				DebugWarning(
 					"[ServerSecure] %d.%d.%d.% reached its query limit!\n",
-					( ip >> 24 ) & 0xFF,
-					( ip >> 16 ) & 0xFF,
-					( ip >> 8 ) & 0xFF,
-					ip & 0xFF
+					( address >> 24 ) & 0xFF,
+					( address >> 16 ) & 0xFF,
+					( address >> 8 ) & 0xFF,
+					address & 0xFF
 				);
 				return false;
 			}

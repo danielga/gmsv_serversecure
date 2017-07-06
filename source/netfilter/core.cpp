@@ -2,6 +2,7 @@
 #include <netfilter/clientmanager.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
+#include <GarrysMod/Lua/LuaInterface.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <set>
@@ -172,13 +173,13 @@ static const char operating_system_char = 'm';
 
 #endif
 
-static std::string server_binary = helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
+static std::string server_binary = Helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
 static CSteamGameServerAPIContext *gameserver_context = nullptr;
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
 static ConVar *sv_maxvisibleplayers = nullptr;
 
-static std::string dedicated_binary = helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
+static std::string dedicated_binary = Helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
 static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
 
 static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
@@ -776,12 +777,12 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 	if( icvar != nullptr )
 		sv_maxvisibleplayers = icvar->FindVar( "sv_maxvisibleplayers" );
 
-	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL_VERSION_9 );
+	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
 	if( gamedll == nullptr )
 		LUA->ThrowError( "failed to load required IServerGameDLL interface" );
 
 	engine_server = global::engine_loader.GetInterface<IVEngineServer>(
-		INTERFACEVERSION_VENGINESERVER_VERSION_21
+		INTERFACEVERSION_VENGINESERVER
 	);
 	if( engine_server == nullptr )
 		LUA->ThrowError( "failed to load required IVEngineServer interface" );

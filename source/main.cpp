@@ -27,7 +27,7 @@ namespace global
 {
 
 SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
-std::string engine_lib = helpers::GetBinaryFileName( "engine", false, true, "bin/" );
+std::string engine_lib = Helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 static bool post_initialized = false;
 
 LUA_FUNCTION_STATIC( PostInitialize )
