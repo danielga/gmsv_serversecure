@@ -8,7 +8,7 @@ local gmcommon = _OPTIONS.gmcommon or os.getenv("GARRYSMOD_COMMON")
 assert(gmcommon ~= nil, "you didn't provide a path to your garrysmod_common (https://github.com/danielga/garrysmod_common) directory")
 include(gmcommon)
 
-CreateWorkspace({name = "serversecure", abi_compatible = false})
+CreateWorkspace({name = "serversecure", abi_compatible = true})
 	CreateProject({serverside = true})
 		IncludeSDKCommon()
 		IncludeSDKTier0()
