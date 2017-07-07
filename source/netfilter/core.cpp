@@ -777,7 +777,7 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	ICvar *icvar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
 	if( icvar != nullptr )
-		sv_maxvisibleplayers = icvar->FindVar( "sv_maxvisibleplayers" );
+		sv_maxvisibleplayers = icvar->FindVar( "sv_visiblemaxplayers" );
 
 	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
 	if( gamedll == nullptr )
