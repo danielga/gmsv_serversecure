@@ -177,7 +177,7 @@ static std::string server_binary = Helpers::GetBinaryFileName( "server", false, 
 static CSteamGameServerAPIContext *gameserver_context = nullptr;
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
-static ConVar *sv_maxvisibleplayers = nullptr;
+static ConVar *sv_visiblemaxplayers = nullptr;
 
 static std::string dedicated_binary = Helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
 static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
@@ -299,8 +299,8 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteShort( appid );
 
 	info_cache_packet.WriteByte( server->GetNumClients( ) );
-	info_cache_packet.WriteByte( sv_maxvisibleplayers != nullptr ?
-		sv_maxvisibleplayers->GetInt( ) :
+	info_cache_packet.WriteByte( sv_visiblemaxplayers != nullptr ?
+		sv_visiblemaxplayers->GetInt( ) :
 		reply_info.max_clients );
 	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
 	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
@@ -777,7 +777,7 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	ICvar *icvar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
 	if( icvar != nullptr )
-		sv_maxvisibleplayers = icvar->FindVar( "sv_visiblemaxplayers" );
+		sv_visiblemaxplayers = icvar->FindVar( "sv_visiblemaxplayers" );
 
 	gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
 	if( gamedll == nullptr )
