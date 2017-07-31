@@ -119,7 +119,7 @@ typedef CUtlVector<netsocket_t> netsockets_t;
 static const char SteamGameServerAPIContext_sym[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
 static const size_t SteamGameServerAPIContext_symlen = sizeof( SteamGameServerAPIContext_sym ) - 1;
 
-static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x56\x8B\x75\x08\x68\x2A\x2A\x2A\x2A\x56\xE8";
+static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8";
 static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
 
 static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
