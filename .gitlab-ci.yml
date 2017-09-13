@@ -9,7 +9,6 @@ gmsv_serversecure:
     GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
     SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/premake-core/premake5"
-    BINARY_PATH: "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_$PROJECT_OS.dll"
     CXX: "g++"
     CC: "gcc"
   before_script:
@@ -55,7 +54,7 @@ gmsv_serversecure:
     - cd "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release"
   artifacts:
     paths:
-      - "$BINARY_PATH"
+      - "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_$PROJECT_OS.dll"
   cache:
     paths:
       - "$DEPENDENCIES/*"
