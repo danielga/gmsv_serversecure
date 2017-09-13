@@ -1,12 +1,10 @@
 gmsv_serversecure:
   stage: build
   tags:
-    - windows
-    - linux
-    - macosx
+    - metaman
   variables:
-    PROJECT_OS: "$CI_RUNNER_TAGS"
-    PREMAKE_OS: "$CI_RUNNER_TAGS"
+    PROJECT_OS: "$CI_RUNNER_DESCRIPTION"
+    PREMAKE_OS: "$CI_RUNNER_DESCRIPTION"
     DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
     GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
     SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
