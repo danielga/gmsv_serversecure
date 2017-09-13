@@ -1,5 +1,4 @@
 gmsv_serversecure:
-  image: danielga/gcc-multilib:4.9.4
   stage: build
   variables:
     DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
@@ -7,8 +6,8 @@ gmsv_serversecure:
     SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/premake-core/premake5"
     BINARY_PATH: "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_linux.dll"
-    CXX: "g++-4.9"
-    CC: "gcc-4.9"
+    CXX: "g++"
+    CC: "gcc"
   before_script:
     - mkdir -p "$DEPENDENCIES"
     - cd "$DEPENDENCIES"
