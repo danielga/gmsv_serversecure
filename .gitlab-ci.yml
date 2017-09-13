@@ -35,7 +35,7 @@ gmsv_serversecure:
         git clone --recursive https://github.com/premake/premake-core.git;
         mv "$DEPENDENCIES/premake-core" "$DEPENDENCIES/premake-core-build";
         cd "$DEPENDENCIES/premake-core-build";
-        make -f Bootstrap.mak "$PROJECT_OS";
+        make -f Bootstrap.mak "$PREMAKE_OS";
         cd "$DEPENDENCIES";
         mkdir "$DEPENDENCIES/premake-core";
         cp "$DEPENDENCIES/premake-core-build/bin/release/premake5" "$DEPENDENCIES/premake-core";
