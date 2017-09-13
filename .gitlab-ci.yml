@@ -28,16 +28,15 @@ before_script:
       git pull;
       cd "$DEPENDENCIES";
     fi
+  - if [ $PROJECT_OS = "macosx" ]; then
+      TARGET_OS="osx";
+    fi
   - if [ ! -f "$DEPENDENCIES/premake-core/premake5" ]; then
       echo "premake-core directory is empty, doing git clone of the remote repo and bootstrap";
       git clone --recursive https://github.com/premake/premake-core.git;
       mv "$DEPENDENCIES/premake-core" "$DEPENDENCIES/premake-core-build";
       cd "$DEPENDENCIES/premake-core-build";
-      if [ $PROJECT_OS = "macosx" ]; then
-        make -f Bootstrap.mak osx;
-      else
-        make -f Bootstrap.mak "$PROJECT_OS";
-      fi
+      make -f Bootstrap.mak "$TARGET_OS";
       cd "$DEPENDENCIES";
       mkdir "$DEPENDENCIES/premake-core";
       cp "$DEPENDENCIES/premake-core-build/bin/release/premake5" "$DEPENDENCIES/premake-core";
