@@ -1,0 +1,56 @@
+gmsv_serversecure:
+  image: danielga/gcc-multilib:4.9.4
+  stage: build
+  variables:
+    DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
+    GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
+    SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
+    PREMAKE5: "$CI_PROJECT_DIR/dependencies/premake-core/premake5"
+    BINARY_PATH: "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_linux.dll"
+    CXX: "g++-4.9"
+    CC: "gcc-4.9"
+  before_script:
+    - mkdir -p "$DEPENDENCIES"
+    - cd "$DEPENDENCIES"
+    - if [ ! -f "$GARRYSMOD_COMMON/premake5.lua" ]; then
+        echo "garrysmod_common directory is empty, doing git clone of the remote repo";
+        git clone --recursive https://github.com/danielga/garrysmod_common.git;
+      else
+        echo "garrysmod_common directory is good, pulling any latest changes";
+        cd "$GARRYSMOD_COMMON";
+        git pull;
+        git submodule update --init --recursive;
+        cd "$DEPENDENCIES";
+      fi
+    - if [ ! -f "$SOURCE_SDK/LICENSE" ]; then
+        echo "sourcesdk-minimal directory is empty, doing git clone of the remote repo";
+        git clone https://github.com/danielga/sourcesdk-minimal.git;
+      else
+        echo "sourcesdk-minimal directory is good, pulling any latest changes";
+        cd "$SOURCE_SDK";
+        git pull;
+        cd "$DEPENDENCIES";
+      fi
+    - if [ ! -f "$DEPENDENCIES/premake-core/premake5" ]; then
+        echo "premake-core directory is empty, doing git clone of the remote repo and bootstrap";
+        git clone --recursive https://github.com/premake/premake-core.git;
+        mv "$DEPENDENCIES/premake-core" "$DEPENDENCIES/premake-core-build";
+        cd "$DEPENDENCIES/premake-core-build";
+        make -f Bootstrap.mak "$PROJECT_OS";
+        cd "$DEPENDENCIES";
+        mkdir "$DEPENDENCIES/premake-core";
+        cp "$DEPENDENCIES/premake-core-build/bin/release/premake5" "$DEPENDENCIES/premake-core";
+      fi
+    - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" gmake
+    - cd "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake"
+  script:
+    - make
+  after_script:
+    - cd "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release"
+  artifacts:
+    paths:
+      - "$BINARY_PATH"
+  cache:
+    paths:
+      - "$DEPENDENCIES/*"
+      - "*.o"
