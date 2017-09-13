@@ -33,7 +33,7 @@ before_script:
       git clone --recursive https://github.com/premake/premake-core.git;
       mv "$DEPENDENCIES/premake-core" "$DEPENDENCIES/premake-core-build";
       cd "$DEPENDENCIES/premake-core-build";
-      if [ $PROJECT_OS == "macosx" ]; then
+      if [ $PROJECT_OS = "macosx" ]; then
         make -f Bootstrap.mak osx;
       else
         make -f Bootstrap.mak "$PROJECT_OS";
