@@ -54,7 +54,7 @@ gmsv_serversecure:
     - cd "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release"
   artifacts:
     paths:
-      - "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_$TARGET_OS.dll"
+      - "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_$$TARGET_OS.dll"
   cache:
     paths:
       - "$DEPENDENCIES/*"
