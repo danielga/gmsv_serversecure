@@ -14,7 +14,7 @@ gmsv_serversecure:
     CC: "gcc"
   before_script:
     - if [ $PREMAKE_OS == "macosx" ]; then
-        export PREMAKE_OS = osx
+        export PREMAKE_OS = osx;
       fi
     - mkdir -p "$DEPENDENCIES"
     - cd "$DEPENDENCIES"
