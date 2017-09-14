@@ -31,6 +31,7 @@ before_script:
       echo "premake-core directory is good, pulling any latest changes";
       cd "$DEPENDENCIES/premake-core";
       git pull;
+      git submodule update --init --recursive;
       cd "$DEPENDENCIES";
     fi
 cache:
@@ -42,7 +43,7 @@ gmsv_serversecure_win32:
     - windows
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
-  before_script:
+  script:
     - mkdir -p "$DEPENDENCIES/windows"
     - if [ ! -f "$PREMAKE5" ]; then
         echo "premake-core directory is empty, bootstrapping";
@@ -54,7 +55,6 @@ gmsv_serversecure_win32:
       fi
     - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" vs2017
     - cd "$CI_PROJECT_DIR/projects/windows/vs2017"
-  script:
     - msbuild gmsv_serversecure.sln /t:gmsv_serversecure /p:Configuration="Release" /p:Platform="x86"
   after_script:
     - cp "$CI_PROJECT_DIR/projects/windows/vs2017/release/gmsv_serversecure_win32.dll" "$CI_PROJECT_DIR"
@@ -72,7 +72,7 @@ gmsv_serversecure_linux:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/linux/premake-core/premake5"
     CXX: "g++-4.9"
     CC: "gcc-4.9"
-  before_script:
+  script:
     - mkdir -p "$DEPENDENCIES/linux"
     - if [ ! -f "$PREMAKE5" ]; then
         echo "premake-core directory is empty, bootstrapping";
@@ -84,7 +84,6 @@ gmsv_serversecure_linux:
       fi
     - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" gmake
     - cd "$CI_PROJECT_DIR/projects/linux/gmake"
-  script:
     - make
   after_script:
     - cp "$CI_PROJECT_DIR/projects/linux/gmake/release/gmsv_serversecure_linux.dll" "$CI_PROJECT_DIR"
@@ -102,7 +101,7 @@ gmsv_serversecure_macosx:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
     CXX: "clang"
     CC: "clang"
-  before_script:
+  script:
     - mkdir -p "$DEPENDENCIES/macosx"
     - if [ ! -f "$PREMAKE5" ]; then
         echo "premake-core directory is empty, bootstrapping";
@@ -114,7 +113,6 @@ gmsv_serversecure_macosx:
       fi
     - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" gmake
     - cd "$CI_PROJECT_DIR/projects/macosx/gmake"
-  script:
     - make
   after_script:
     - cp "$CI_PROJECT_DIR/projects/macosx/gmake/release/gmsv_serversecure_osx.dll" "$CI_PROJECT_DIR"
