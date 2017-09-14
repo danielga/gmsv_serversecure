@@ -13,8 +13,8 @@ before_script:
       cd "$GARRYSMOD_COMMON";
       git pull;
       git submodule update --init --recursive;
-      cd "$DEPENDENCIES";
     fi
+  - cd "$DEPENDENCIES"
   - if [ ! -f "$SOURCE_SDK/LICENSE" ]; then
       echo "sourcesdk-minimal directory is empty, doing git clone of the remote repo";
       git clone https://github.com/danielga/sourcesdk-minimal.git;
@@ -22,8 +22,8 @@ before_script:
       echo "sourcesdk-minimal directory is good, pulling any latest changes";
       cd "$SOURCE_SDK";
       git pull;
-      cd "$DEPENDENCIES";
     fi
+  - cd "$DEPENDENCIES"
   - if [ ! -f "$DEPENDENCIES/premake-core/premake5.lua" ]; then
       echo "premake-core directory is empty, doing git clone of the remote repo";
       git clone --recursive https://github.com/premake/premake-core.git;
@@ -32,7 +32,6 @@ before_script:
       cd "$DEPENDENCIES/premake-core";
       git pull;
       git submodule update --init --recursive;
-      cd "$DEPENDENCIES";
     fi
 cache:
   paths:
@@ -99,8 +98,8 @@ gmsv_serversecure_macosx:
     - macosx
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
-    CXX: "clang"
-    CC: "clang"
+    CXX: "g++"
+    CC: "gcc"
   script:
     - mkdir -p "$DEPENDENCIES/macosx"
     - if [ ! -f "$PREMAKE5" ]; then
