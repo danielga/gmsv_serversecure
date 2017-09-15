@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mkdir -p "$DEPENDENCIES"
 cd "$DEPENDENCIES"
 
