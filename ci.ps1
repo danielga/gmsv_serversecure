@@ -45,8 +45,8 @@ else
 
 mkdir "$env:DEPENDENCIES/windows" -ErrorAction SilentlyContinue
 
-pushd "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\Tools"
-cmd /c "VsDevCmd.bat&set" |
+pushd "C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\Tools"
+cmd /c "vsvars32.bat&set" |
 foreach {
 	if( $_ -match "=" )
 	{
@@ -55,7 +55,7 @@ foreach {
 	}
 }
 popd
-Write-Host "`nVisual Studio 2017 command prompt variables set." -ForegroundColor Yellow
+Write-Host "`nVisual Studio 2015 command prompt variables set." -ForegroundColor Yellow
 
 if( !( ( Get-Item "$env:PREMAKE5" -ErrorAction SilentlyContinue ) -is [System.IO.FileInfo] ) )
 {
