@@ -71,7 +71,7 @@ cd "$env:CI_PROJECT_DIR/projects"
 & "$env:PREMAKE5" vs2017
 cd "$env:CI_PROJECT_DIR/projects/windows/vs2017"
 
-msbuild gmsv_serversecure.sln /p:Configuration=Release
+msbuild serversecure.sln /p:Configuration=Release
 
 cp "$env:CI_PROJECT_DIR/projects/windows/vs2017/release/gmsv_serversecure_win32.dll" "$env:CI_PROJECT_DIR"
 cd "$env:CI_PROJECT_DIR"
