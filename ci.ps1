@@ -45,7 +45,7 @@ else
 
 mkdir "$env:DEPENDENCIES/windows" -ErrorAction SilentlyContinue
 
-pushd "C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\Common7\Tools"
+pushd "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\Tools"
 cmd /c "VsDevCmd.bat&set" |
 foreach {
 	if( $_ -match "=" )
