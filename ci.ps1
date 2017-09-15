@@ -45,8 +45,8 @@ else
 
 mkdir "$env:DEPENDENCIES/windows" -ErrorAction SilentlyContinue
 
-pushd "C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\Tools"
-cmd /c "vsvars32.bat&set" |
+pushd "C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\Common7\Tools"
+cmd /c "VsDevCmd.bat&set" |
 foreach {
 	if( $_ -match "=" )
 	{
@@ -55,7 +55,7 @@ foreach {
 	}
 }
 popd
-Write-Host "`nVisual Studio 2015 command prompt variables set." -ForegroundColor Yellow
+Write-Host "`nVisual Studio 2017 command prompt variables set." -ForegroundColor Yellow
 
 if( !( ( Get-Item "$env:PREMAKE5" -ErrorAction SilentlyContinue ) -is [System.IO.FileInfo] ) )
 {
@@ -68,10 +68,10 @@ if( !( ( Get-Item "$env:PREMAKE5" -ErrorAction SilentlyContinue ) -is [System.IO
 }
 
 cd "$env:CI_PROJECT_DIR/projects"
-& "$env:PREMAKE5" vs2015
-cd "$env:CI_PROJECT_DIR/projects/windows/vs2015"
+& "$env:PREMAKE5" vs2017
+cd "$env:CI_PROJECT_DIR/projects/windows/vs2017"
 
-msbuild loadlib.sln /p:Configuration=Release
+msbuild gmsv_serversecure.sln /p:Configuration=Release
 
-cp "$env:CI_PROJECT_DIR/projects/windows/vs2015/release/gmsv_loadlib_win32.dll" "$env:CI_PROJECT_DIR"
+cp "$env:CI_PROJECT_DIR/projects/windows/vs2017/release/gmsv_serversecure_win32.dll" "$env:CI_PROJECT_DIR"
 cd "$env:CI_PROJECT_DIR"
