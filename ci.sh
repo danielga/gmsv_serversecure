@@ -49,6 +49,7 @@ fi
 
 cd "$CI_PROJECT_DIR/projects"
 "$PREMAKE5" gmake
+
 cd "$CI_PROJECT_DIR/projects/$PROJECT_OS/gmake"
 
 make
