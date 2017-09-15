@@ -2,122 +2,39 @@ variables:
   DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
   GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
   SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
-before_script:
-  - mkdir -p "$DEPENDENCIES"
-  - cd "$DEPENDENCIES"
-  - if [ ! -f "$GARRYSMOD_COMMON/premake5.lua" ]; then
-      echo "garrysmod_common directory is empty, doing git clone of the remote repo";
-      git clone --recursive https://github.com/danielga/garrysmod_common.git;
-    else
-      echo "garrysmod_common directory is good, pulling any latest changes";
-      cd "$GARRYSMOD_COMMON";
-      git pull;
-      git submodule update --init --recursive;
-    fi
-  - cd "$DEPENDENCIES"
-  - if [ ! -f "$SOURCE_SDK/LICENSE" ]; then
-      echo "sourcesdk-minimal directory is empty, doing git clone of the remote repo";
-      git clone https://github.com/danielga/sourcesdk-minimal.git;
-    else
-      echo "sourcesdk-minimal directory is good, pulling any latest changes";
-      cd "$SOURCE_SDK";
-      git pull;
-    fi
-  - cd "$DEPENDENCIES"
-  - if [ ! -f "$DEPENDENCIES/premake-core/premake5.lua" ]; then
-      echo "premake-core directory is empty, doing git clone of the remote repo";
-      git clone --recursive https://github.com/premake/premake-core.git;
-    else
-      echo "premake-core directory is good, pulling any latest changes";
-      cd "$DEPENDENCIES/premake-core";
-      git pull;
-      git submodule update --init --recursive;
-    fi
 cache:
   paths:
     - "$DEPENDENCIES/*"
+    - "$CI_PROJECT_DIR/projects/*"
 gmsv_serversecure_win32:
   stage: build
-  tags:
-    - windows
+  tags: windows
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
-  script:
-    - mkdir -p "$DEPENDENCIES/windows"
-    - if [ ! -f "$PREMAKE5" ]; then
-        echo "premake-core directory is empty, bootstrapping";
-        cd "$DEPENDENCIES/premake-core";
-        nmake -f Bootstrap.mak windows;
-        cd "$DEPENDENCIES";
-        mkdir -p "$DEPENDENCIES/windows/premake-core";
-        cp "$DEPENDENCIES/premake-core/bin/release/premake5.exe" "$DEPENDENCIES/windows/premake-core";
-      fi
-    - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" vs2017
-    - cd "$CI_PROJECT_DIR/projects/windows/vs2017"
-    - msbuild gmsv_serversecure.sln /t:gmsv_serversecure /p:Configuration="Release" /p:Platform="x86"
-  after_script:
-    - cp "$CI_PROJECT_DIR/projects/windows/vs2017/release/gmsv_serversecure_win32.dll" "$CI_PROJECT_DIR"
-  cache:
-    paths:
-      - "$CI_PROJECT_DIR/projects/windows/vs2017/*"
+  script: ./ci.ps1
   artifacts:
-    paths:
-      - "gmsv_serversecure_win32.dll"
+    paths: "gmsv_serversecure_win32.dll"
 gmsv_serversecure_linux:
   stage: build
-  tags:
-    - linux
+  tags: linux
   variables:
+    PROJECT_OS: "linux"
+    TARGET_OS: "linux"
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/linux/premake-core/premake5"
     CXX: "g++-4.9"
     CC: "gcc-4.9"
-  script:
-    - mkdir -p "$DEPENDENCIES/linux"
-    - if [ ! -f "$PREMAKE5" ]; then
-        echo "premake-core directory is empty, bootstrapping";
-        cd "$DEPENDENCIES/premake-core";
-        make -f Bootstrap.mak linux;
-        cd "$DEPENDENCIES";
-        mkdir -p "$DEPENDENCIES/linux/premake-core";
-        cp "$DEPENDENCIES/premake-core/bin/release/premake5" "$DEPENDENCIES/linux/premake-core";
-      fi
-    - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" gmake
-    - cd "$CI_PROJECT_DIR/projects/linux/gmake"
-    - make
-  after_script:
-    - cp "$CI_PROJECT_DIR/projects/linux/gmake/release/gmsv_serversecure_linux.dll" "$CI_PROJECT_DIR"
-  cache:
-    paths:
-      - "$CI_PROJECT_DIR/projects/linux/gmake/*"
+  script: ./ci.sh
   artifacts:
-    paths:
-      - "gmsv_serversecure_linux.dll"
+    paths: "gmsv_serversecure_linux.dll"
 gmsv_serversecure_macosx:
   stage: build
-  tags:
-    - macosx
+  tags: macosx
   variables:
+    PROJECT_OS: "macosx"
+    TARGET_OS: "osx"
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
     CXX: "g++"
     CC: "gcc"
-  script:
-    - mkdir -p "$DEPENDENCIES/macosx"
-    - if [ ! -f "$PREMAKE5" ]; then
-        echo "premake-core directory is empty, bootstrapping";
-        cd "$DEPENDENCIES/premake-core";
-        make -f Bootstrap.mak osx;
-        cd "$DEPENDENCIES";
-        mkdir -p "$DEPENDENCIES/macosx/premake-core";
-        cp "$DEPENDENCIES/premake-core/bin/release/premake5" "$DEPENDENCIES/macosx/premake-core";
-      fi
-    - cd "$CI_PROJECT_DIR/projects" && "$PREMAKE5" gmake
-    - cd "$CI_PROJECT_DIR/projects/macosx/gmake"
-    - make
-  after_script:
-    - cp "$CI_PROJECT_DIR/projects/macosx/gmake/release/gmsv_serversecure_osx.dll" "$CI_PROJECT_DIR"
-  cache:
-    paths:
-      - "$CI_PROJECT_DIR/projects/macosx/gmake/*"
+  script: ./ci.sh
   artifacts:
-    paths:
-      - "gmsv_serversecure_osx.dll"
+    paths: "gmsv_serversecure_osx.dll"

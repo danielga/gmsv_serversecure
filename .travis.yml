@@ -7,6 +7,7 @@ osx_image: xcode7.3
 cache:
   directories:
     - "$HOME/dependencies"
+    - "$HOME/projects"
 addons:
   apt:
     sources:
@@ -21,59 +22,24 @@ branches:
   only:
     - master
 install:
-  - export GARRYSMOD_COMMON="$HOME/dependencies/garrysmod_common"
-  - export SOURCE_SDK="$HOME/dependencies/sourcesdk-minimal"
-  - if [[ ${TRAVIS_OS_NAME} = osx ]]; then
-      export BINARY_PATH=gmsv_serversecure_osx.dll;
-      export PREMAKE5="$HOME/dependencies/premake-core/premake5 --cc=clang";
+  - export DEPENDENCIES="$HOME/dependencies"
+  - export GARRYSMOD_COMMON="$DEPENDENCIES/garrysmod_common"
+  - export SOURCE_SDK="$DEPENDENCIES/sourcesdk-minimal"
+  - export TARGET_OS=$TRAVIS_OS_NAME
+  - if [ $TRAVIS_OS_NAME = "osx" ]; then
+      export PREMAKE5="$DEPENDENCIES/macosx/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
-    elif [[ ${TRAVIS_OS_NAME} = linux ]]; then
-      export BINARY_PATH=gmsv_serversecure_linux.dll;
-      export PREMAKE5="$HOME/dependencies/premake-core/premake5";
+    elif [ $TRAVIS_OS_NAME = "linux" ]; then
+      export PREMAKE5="$DEPENDENCIES/linux/premake-core/premake5";
       export PROJECT_OS=linux;
       export CXX=g++-4.9;
       export CC=gcc-4.9;
     fi
-  - export REPO="`pwd`"
-  - cd "$HOME/dependencies"
-  - if [ ! -f "garrysmod_common/premake5.lua" ]; then
-      echo "garrysmod_common directory is empty, doing git clone of the remote repo";
-      git clone --recursive https://github.com/danielga/garrysmod_common.git;
-    else
-      echo "garrysmod_common directory is good, pulling any latest changes";
-      cd garrysmod_common;
-      git pull;
-      git submodule update --init --recursive;
-      cd ..;
-    fi
-  - if [ ! -f "sourcesdk-minimal/LICENSE" ]; then
-      echo "sourcesdk-minimal directory is empty, doing git clone of the remote repo";
-      git clone https://github.com/danielga/sourcesdk-minimal.git;
-    else
-      echo "sourcesdk-minimal directory is good, pulling any latest changes";
-      cd sourcesdk-minimal;
-      git pull;
-      cd ..;
-    fi
-  - if [ ! -f "premake-core/premake5" ]; then
-      echo "premake-core directory is empty, doing git clone of the remote repo and bootstrap";
-      git clone --recursive https://github.com/premake/premake-core.git;
-      mv premake-core premake-core-build;
-      cd premake-core-build;
-      make -f Bootstrap.mak $TRAVIS_OS_NAME;
-      cd ..;
-      mkdir premake-core;
-      cp premake-core-build/bin/release/premake5 premake-core;
-    fi
-before_script: cd "$REPO/projects" && $PREMAKE5 gmake
-script:
-  - cd "$PROJECT_OS/gmake"
-  - make
-before_deploy: cd release
+script: ./ci.sh
 deploy:
   provider: releases
   skip_cleanup: true
-  file: "$BINARY_PATH"
+  file: "gmsv_serversecure_$TARGET_OS.dll"
   on:
     repo: danielga/gmsv_serversecure
   api_key:
