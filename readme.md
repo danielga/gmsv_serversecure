@@ -23,4 +23,3 @@ This project requires [garrysmod_common][4], a framework to facilitate the creat
   [3]: http://gmodmodules.googlecode.com/svn/trunk/serversecure3
   [4]: https://github.com/danielga/garrysmod_common
   [5]: https://github.com/danielga/sourcesdk-minimal
-
