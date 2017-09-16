@@ -11,6 +11,8 @@ gmsv_serversecure_win32:
   stage: build
   tags:
     - windows
+  only:
+    - tags
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
   script: "& \"$CI_PROJECT_DIR/ci.ps1\""
@@ -21,6 +23,8 @@ gmsv_serversecure_linux:
   stage: build
   tags:
     - linux
+  only:
+    - tags
   variables:
     PROJECT_OS: "linux"
     TARGET_OS: "linux"
@@ -35,6 +39,8 @@ gmsv_serversecure_macosx:
   stage: build
   tags:
     - macosx
+  only:
+    - tags
   variables:
     PROJECT_OS: "macosx"
     TARGET_OS: "osx"
