@@ -42,6 +42,6 @@ deploy:
   skip_cleanup: true
   file: "gmsv_${MODULE_NAME}_$TARGET_OS.dll"
   on:
-    repo: danielga/gmsv_serversecure
+    tags: true
   api_key:
     secure: DMW0byGslhkzT3m4xgGHPIg8IsbmgfdDvwhyiDOyssftqcZnddl7Yit1IS/4q/StMeagWrCF+cbYee0n1v5QtOUu3Cr5EXBFgzwHmvYdTGHuEbMwcR/uM5R6UzgXpNn363mWiyYP5txuA2dX8DPULMZU/BCCxH9/Uuk6nNC8KfoSTAjYQTRt+VToNVEBKcZJ/VWlP2LWketQyY83r0OFnwbXihpw+Z/WAmt3FUfvtrAdBnOi3vxHCoib6RvHcUp4FLIrLEkmAjrFwrhKn/miPWWpCmh+Ou4YXSVuE5Wzj+zNY/6XpS4l4VDVu5zgu4T0RsYxS/9f9QoYPTo19By9NcWgXY9kdUcxAoRSv9JIPE4779a7THrXvnlrRu1B+wo9NAnxjK2rTmdFlLQrqR8uaSXKgTOyRlFHao5/AX82vss44XcWqM8dNQk8tjc4uwb9n1WAnDIKJ9KBKCD5EmfeVMTPEuGfIQJmHcNc/VLzBiD8rrLDP+w4zcK5QqLNr3jqes0u/OJz+XFAehkmIs6rt9Lt8D66h2hgu/OYwsdIc/1ZvyySZrVzcSzmGlgQbwQheXPlFcdQncvQH87LQmj48Vj49tPbwWcmiAd/3tHNSS1ZcNc2VrMSNEJZ0lS2zgg+0i7FBYYAC9vbQAtxN7MI+6SwL4en5DjVHW3AKRlTTIw=
