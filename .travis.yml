@@ -24,6 +24,7 @@ install:
   - export GARRYSMOD_COMMON="$DEPENDENCIES/garrysmod_common"
   - export SOURCE_SDK="$DEPENDENCIES/sourcesdk-minimal"
   - export TARGET_OS=$TRAVIS_OS_NAME
+  - export CI_PROJECT_DIR=$HOME
   - if [ $TRAVIS_OS_NAME = "osx" ]; then
       export PREMAKE5="$DEPENDENCIES/macosx/premake-core/premake5 --cc=clang";
       export PROJECT_OS=macosx;
@@ -33,7 +34,7 @@ install:
       export CXX=g++-4.9;
       export CC=gcc-4.9;
     fi
-script: "$CI_PROJECT_DIR/ci.sh"
+script: "$HOME/ci.sh"
 deploy:
   provider: releases
   skip_cleanup: true
