@@ -13,7 +13,7 @@ gmsv_serversecure_win32:
     - windows
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
-  script: & "$CI_PROJECT_DIR/ci.ps1"
+  script: "& \"$CI_PROJECT_DIR/ci.ps1\""
   artifacts:
     paths:
       - "gmsv_${MODULE_NAME}_win32.dll"
