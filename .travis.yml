@@ -22,6 +22,7 @@ branches:
   only:
     - master
 install:
+  - export MODULE_NAME="serversecure"
   - export DEPENDENCIES="$HOME/dependencies"
   - export GARRYSMOD_COMMON="$DEPENDENCIES/garrysmod_common"
   - export SOURCE_SDK="$DEPENDENCIES/sourcesdk-minimal"
@@ -35,11 +36,11 @@ install:
       export CXX=g++-4.9;
       export CC=gcc-4.9;
     fi
-script: ./ci.sh
+script: "$CI_PROJECT_DIR/ci.sh"
 deploy:
   provider: releases
   skip_cleanup: true
-  file: "gmsv_serversecure_$TARGET_OS.dll"
+  file: "gmsv_${MODULE_NAME}_$TARGET_OS.dll"
   on:
     repo: danielga/gmsv_serversecure
   api_key:

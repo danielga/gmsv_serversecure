@@ -1,4 +1,5 @@
 variables:
+  MODULE_NAME: "serversecure"
   DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
   GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
   SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
@@ -12,10 +13,10 @@ gmsv_serversecure_win32:
     - windows
   variables:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
-  script: ./ci.ps1
+  script: & "$CI_PROJECT_DIR/ci.ps1"
   artifacts:
     paths:
-      - "gmsv_serversecure_win32.dll"
+      - "gmsv_${MODULE_NAME}_win32.dll"
 gmsv_serversecure_linux:
   stage: build
   tags:
@@ -26,10 +27,10 @@ gmsv_serversecure_linux:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/linux/premake-core/premake5"
     CXX: "g++-4.9"
     CC: "gcc-4.9"
-  script: ./ci.sh
+  script: "$CI_PROJECT_DIR/ci.sh"
   artifacts:
     paths:
-      - "gmsv_serversecure_linux.dll"
+      - "gmsv_${MODULE_NAME}_linux.dll"
 gmsv_serversecure_macosx:
   stage: build
   tags:
@@ -40,7 +41,7 @@ gmsv_serversecure_macosx:
     PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
     CXX: "g++"
     CC: "gcc"
-  script: ./ci.sh
+  script: "$CI_PROJECT_DIR/ci.sh"
   artifacts:
     paths:
-      - "gmsv_serversecure_osx.dll"
+      - "gmsv_${MODULE_NAME}_osx.dll"
