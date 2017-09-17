@@ -45,7 +45,7 @@ gmsv_serversecure_macosx:
   variables:
     PROJECT_OS: "macosx"
     TARGET_OS: "osx"
-    PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake"
+    PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
     CXX: "g++"
     CC: "gcc"
   script: "$CI_PROJECT_DIR/ci.sh"
