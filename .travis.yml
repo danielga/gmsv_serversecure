@@ -26,10 +26,10 @@ install:
   - export TARGET_OS=$TRAVIS_OS_NAME
   - export REPOSITORY_DIR=$TRAVIS_BUILD_DIR
   - if [ $TRAVIS_OS_NAME = "osx" ]; then
-      export PREMAKE5="$DEPENDENCIES/macosx/premake-core/premake5 --cc=clang";
+      export PREMAKE5="\"$DEPENDENCIES/macosx/premake-core/premake5\" --cc=clang";
       export PROJECT_OS=macosx;
     elif [ $TRAVIS_OS_NAME = "linux" ]; then
-      export PREMAKE5="$DEPENDENCIES/linux/premake-core/premake5";
+      export PREMAKE5="\"$DEPENDENCIES/linux/premake-core/premake5\"";
       export PROJECT_OS=linux;
       export CXX=g++-4.9;
       export CC=gcc-4.9;

@@ -15,7 +15,7 @@ gmsv_serversecure_win32:
   only:
     - tags
   variables:
-    PREMAKE5: "$CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe"
+    PREMAKE5: "$\"CI_PROJECT_DIR/dependencies/windows/premake-core/premake5.exe\""
   script: "& \"$CI_PROJECT_DIR/ci.ps1\""
   artifacts:
     paths:
@@ -29,7 +29,7 @@ gmsv_serversecure_linux:
   variables:
     PROJECT_OS: "linux"
     TARGET_OS: "linux"
-    PREMAKE5: "$CI_PROJECT_DIR/dependencies/linux/premake-core/premake5"
+    PREMAKE5: "\"$CI_PROJECT_DIR/dependencies/linux/premake-core/premake5\""
     CXX: "g++-4.9"
     CC: "gcc-4.9"
   script: "$CI_PROJECT_DIR/ci.sh"
@@ -45,7 +45,7 @@ gmsv_serversecure_macosx:
   variables:
     PROJECT_OS: "macosx"
     TARGET_OS: "osx"
-    PREMAKE5: "$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5"
+    PREMAKE5: "\"$CI_PROJECT_DIR/dependencies/macosx/premake-core/premake5\" --cc=clang"
     CXX: "g++"
     CC: "gcc"
   script: "$CI_PROJECT_DIR/ci.sh"

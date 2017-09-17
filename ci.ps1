@@ -68,7 +68,7 @@ if( !( ( Get-Item "$env:PREMAKE5" -ErrorAction SilentlyContinue ) -is [System.IO
 }
 
 cd "$env:REPOSITORY_DIR/projects"
-& "$env:PREMAKE5" vs2017
+& $env:PREMAKE5 vs2017
 cd "$env:REPOSITORY_DIR/projects/windows/vs2017"
 
 msbuild serversecure.sln /p:Configuration=Release

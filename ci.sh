@@ -48,7 +48,7 @@ if [ ! -f "$PREMAKE5" ]; then
 fi
 
 cd "$REPOSITORY_DIR/projects"
-"$PREMAKE5" gmake
+$PREMAKE5 gmake
 cd "$REPOSITORY_DIR/projects/$PROJECT_OS/gmake"
 
 make
