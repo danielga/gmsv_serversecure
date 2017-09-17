@@ -9,6 +9,7 @@
 #include <detours.h>
 #include <networkstringtabledefs.h>
 #include <strtools.h>
+#include <cstring>
 
 namespace filecheck
 {
