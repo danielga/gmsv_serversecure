@@ -3,6 +3,7 @@ variables:
   DEPENDENCIES: "$CI_PROJECT_DIR/dependencies"
   GARRYSMOD_COMMON: "$CI_PROJECT_DIR/dependencies/garrysmod_common"
   SOURCE_SDK: "$CI_PROJECT_DIR/dependencies/sourcesdk-minimal"
+  REPOSITORY_DIR: "$CI_PROJECT_DIR"
 cache:
   paths:
     - "$DEPENDENCIES/*"
