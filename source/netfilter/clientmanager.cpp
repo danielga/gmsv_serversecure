@@ -19,7 +19,7 @@ namespace netfilter
 			return true;
 
 		if( clients.size( ) >= MaxClients )
-			for( std::map<uint32_t, Client>::iterator it = clients.begin( ); it != clients.end( ); ++it )
+			for( auto it = clients.begin( ); it != clients.end( ); ++it )
 			{
 				const Client &client = ( *it ).second;
 				if( client.TimedOut( time ) && client.GetAddress( ) != from )
@@ -31,7 +31,7 @@ namespace netfilter
 				}
 			}
 
-		std::map<uint32_t, Client>::iterator it = clients.find( from );
+		auto it = clients.find( from );
 		if( it != clients.end( ) )
 		{
 			Client &client = ( *it ).second;

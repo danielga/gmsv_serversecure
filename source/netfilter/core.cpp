@@ -2,10 +2,9 @@
 #include <netfilter/clientmanager.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <GarrysMod/Lua/LuaInterface.h>
+#include <GarrysMod/Interfaces.hpp>
 #include <stdint.h>
 #include <stddef.h>
-#include <set>
 #include <queue>
 #include <string>
 #include <eiface.h>
@@ -14,15 +13,16 @@
 #include <threadtools.h>
 #include <utlvector.h>
 #include <bitbuf.h>
-#include <steam/steamclientpublic.h>
 #include <steam/steam_gameserver.h>
-#include <GarrysMod/Interfaces.hpp>
-#include <symbolfinder.hpp>
 #include <game/server/iplayerinfo.h>
+#include <scanning/symbolfinder.hpp>
 
 #if defined _WIN32
 
-#include <winsock2.h>
+#define VC_EXTRALEAN
+#define WIN32_LEAN_AND_MEAN
+
+#include <WinSock2.h>
 #include <unordered_set>
 
 typedef std::unordered_set<uint32_t> set_uint32;
@@ -46,9 +46,23 @@ typedef std::unordered_set<uint32_t> set_uint32;
 #include <arpa/inet.h>
 #include <errno.h>
 
+#if ( __GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ ) >= 40300
+
+#include <unordered_set>
+
+typedef std::unordered_set<uint32_t> set_uint32;
+
+#else
+
+#include <set>
+
 typedef std::set<uint32_t> set_uint32;
 
 #endif
+
+#endif
+
+class CBaseServer;
 
 namespace netfilter
 {
@@ -116,20 +130,21 @@ typedef CUtlVector<netsocket_t> netsockets_t;
 
 #if defined _WIN32
 
-static const char SteamGameServerAPIContext_sym[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
-static const size_t SteamGameServerAPIContext_symlen = sizeof( SteamGameServerAPIContext_sym ) - 1;
+static const char SteamGameServerAPIContext_sym[] =
+	"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
+static const size_t SteamGameServerAPIContext_symlen =
+	sizeof( SteamGameServerAPIContext_sym ) - 1;
 
-static const char FileSystemFactory_sym[] = "\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8";
+static const char FileSystemFactory_sym[] =
+	"\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8";
 static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
 
 static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
 static const size_t g_pFullFileSystem_symlen = 0;
 
-static const char net_sockets_sig[] = "\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10";
+static const char net_sockets_sig[] =
+	"\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10";
 static size_t net_sockets_siglen = sizeof( net_sockets_sig ) - 1;
-
-static const char IServer_sig[] = "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
-static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
 static const char operating_system_char = 'w';
 
@@ -147,39 +162,35 @@ static const size_t g_pFullFileSystem_symlen = 0;
 static const char net_sockets_sig[] = "@_ZL11net_sockets";
 static const size_t net_sockets_siglen = 0;
 
-static const char IServer_sig[] = "@sv";
-static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
-
 static const char operating_system_char = 'l';
 
 #elif defined __APPLE__
 
-static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
+static const char SteamGameServerAPIContext_sym[] = "@__ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
 
-static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
+static const char FileSystemFactory_sym[] = "@__Z17FileSystemFactoryPKcPi";
 static const size_t FileSystemFactory_symlen = 0;
 
-static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
+static const char g_pFullFileSystem_sym[] = "@_g_pFullFileSystem";
 static const size_t g_pFullFileSystem_symlen = 0;
 
-static const char net_sockets_sig[] = "@_ZL11net_sockets";
+static const char net_sockets_sig[] = "@__ZL11net_sockets";
 static const size_t net_sockets_siglen = 0;
-
-static const char IServer_sig[] = "@sv";
-static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
 static const char operating_system_char = 'm';
 
 #endif
 
-static std::string server_binary = Helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
+static std::string server_binary =
+	Helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
 static CSteamGameServerAPIContext *gameserver_context = nullptr;
 
 static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
 static ConVar *sv_visiblemaxplayers = nullptr;
 
-static std::string dedicated_binary = Helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
+static std::string dedicated_binary =
+	Helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
 static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
 
 static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
@@ -210,16 +221,15 @@ static uint32_t info_cache_time = 5;
 
 static ClientManager client_manager;
 
-static const size_t packet_sampling_max_queue = 10;
-static bool packet_sampling_enabled = false;
+static const size_t packet_sampling_max_queue = 50;
+static volatile bool packet_sampling_enabled = false;
 static std::deque<packet_t> packet_sampling_queue;
+static CThreadFastMutex packet_sampling_mutex;
 
-static IServer *server = nullptr;
 static CGlobalVars *globalvars = nullptr;
 static IServerGameDLL *gamedll = nullptr;
 static IVEngineServer *engine_server = nullptr;
 static IFileSystem *filesystem = nullptr;
-static GarrysMod::Lua::ILuaInterface *lua = nullptr;
 
 static void BuildStaticReplyInfo( )
 {
@@ -235,9 +245,9 @@ static void BuildStaticReplyInfo( )
 			reply_info.game_dir.erase( 0, pos + 1 );
 	}
 
-	reply_info.max_clients = server->GetMaxClients( );
+	reply_info.max_clients = global::server->GetMaxClients( );
 
-	reply_info.udp_port = server->GetUDPPort( );
+	reply_info.udp_port = global::server->GetUDPPort( );
 
 	{
 		const IGamemodeSystem::Information &gamemode =
@@ -290,24 +300,25 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteLong( -1 ); // connectionless packet header
 	info_cache_packet.WriteByte( 'I' ); // packet type is always 'I'
 	info_cache_packet.WriteByte( default_proto_version );
-	info_cache_packet.WriteString( server->GetName( ) );
-	info_cache_packet.WriteString( server->GetMapName( ) );
+	info_cache_packet.WriteString( global::server->GetName( ) );
+	info_cache_packet.WriteString( global::server->GetMapName( ) );
 	info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
 	info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
 
 	int32_t appid = engine_server->GetAppID( );
 	info_cache_packet.WriteShort( appid );
 
-	info_cache_packet.WriteByte( server->GetNumClients( ) );
+	info_cache_packet.WriteByte( global::server->GetNumClients( ) );
 	info_cache_packet.WriteByte( sv_visiblemaxplayers != nullptr ?
 		sv_visiblemaxplayers->GetInt( ) :
 		reply_info.max_clients );
-	info_cache_packet.WriteByte( server->GetNumFakeClients( ) );
+	info_cache_packet.WriteByte( global::server->GetNumFakeClients( ) );
 	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 	info_cache_packet.WriteByte( operating_system_char );
-	info_cache_packet.WriteByte( server->GetPassword( ) != nullptr ? 1 : 0 );
+	info_cache_packet.WriteByte( global::server->GetPassword( ) != nullptr ? 1 : 0 );
 	// if vac protected, it activates itself some time after startup
-	ISteamGameServer *steamGS = gameserver_context != nullptr ? gameserver_context->m_pSteamGameServer : nullptr;
+	ISteamGameServer *steamGS = gameserver_context != nullptr ?
+		gameserver_context->m_pSteamGameServer : nullptr;
 	info_cache_packet.WriteByte( steamGS != nullptr ? steamGS->BSecure( ) : false );
 	info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
@@ -511,17 +522,22 @@ inline int32_t ReceiveAndAnalyzePacket(
 	if( len == -1 )
 		return -1;
 
-	if( packet_sampling_enabled )
 	{
-		// there should only be packet_sampling_max_queue packets on the queue at the moment of this check
-		if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
-			packet_sampling_queue.pop_front( );
+		AUTO_LOCK( packet_sampling_mutex );
 
-		packet_t p;
-		memcpy( &p.address, from, *fromlen );
-		p.address_size = *fromlen;
-		p.buffer.assign( buf, buf + len );
-		packet_sampling_queue.push_back( p );
+		if( packet_sampling_enabled )
+		{
+			// there should only be packet_sampling_max_queue packets on the queue
+			// at the moment of this check
+			if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
+				packet_sampling_queue.pop_front( );
+
+			packet_t p;
+			memcpy( &p.address, from, *fromlen );
+			p.address_size = *fromlen;
+			p.buffer.assign( buf, buf + len );
+			packet_sampling_queue.push_back( p );
+		}
 	}
 
 	if( !IsAddressAllowed( infrom ) )
@@ -537,7 +553,7 @@ inline int32_t ReceiveAndAnalyzePacket(
 	return len;
 }
 
-static int32_t Hook_recvfrom_d(
+static int32_t Hook_recvfrom_detour(
 	int32_t s,
 	char *buf,
 	int32_t buflen,
@@ -568,7 +584,7 @@ static int32_t Hook_recvfrom_d(
 	return len;
 }
 
-static uint32_t Hook_recvfrom_thread( void * )
+static uint32_t PacketReceiverThread( void * )
 {
 	timeval ms100 = { 0, 100000 };
 	char tempbuf[65535] = { 0 };
@@ -576,7 +592,8 @@ static uint32_t Hook_recvfrom_thread( void * )
 
 	while( threaded_socket_execute )
 	{
-		if( !threaded_socket_enabled || threaded_socket_queue.size( ) >= threaded_socket_max_queue )
+		if( !threaded_socket_enabled ||
+			threaded_socket_queue.size( ) >= threaded_socket_max_queue )
 		// testing for maximum queue size, this is a very cheap "fix"
 		// the socket itself has a queue too but will start dropping packets when full
 		{
@@ -586,9 +603,8 @@ static uint32_t Hook_recvfrom_thread( void * )
 
 		FD_ZERO( &readables );
 		FD_SET( game_socket, &readables );
-		int res = select( game_socket + 1, &readables, nullptr, nullptr, &ms100 );
-		ms100.tv_usec = 100000;
-		if( res == -1 || !FD_ISSET( game_socket, &readables ) )
+		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 ||
+			!FD_ISSET( game_socket, &readables ) )
 			continue;
 
 		packet_t p;
@@ -610,10 +626,10 @@ static uint32_t Hook_recvfrom_thread( void * )
 	return 0;
 }
 
-inline void SetDetourStatus( bool enabled )
+inline void SetReceiveDetourStatus( bool enabled )
 {
 	if( enabled )
-		VCRHook_recvfrom = Hook_recvfrom_d;
+		VCRHook_recvfrom = Hook_recvfrom_detour;
 	else if( !firewall_whitelist_enabled &&
 		!firewall_blacklist_enabled &&
 		!packet_validation_enabled &&
@@ -625,7 +641,7 @@ LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 	firewall_whitelist_enabled = LUA->GetBool( 1 );
-	SetDetourStatus( firewall_whitelist_enabled );
+	SetReceiveDetourStatus( firewall_whitelist_enabled );
 	return 0;
 }
 
@@ -654,7 +670,7 @@ LUA_FUNCTION_STATIC( EnableFirewallBlacklist )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 	firewall_blacklist_enabled = LUA->GetBool( 1 );
-	SetDetourStatus( firewall_blacklist_enabled );
+	SetReceiveDetourStatus( firewall_blacklist_enabled );
 	return 0;
 }
 
@@ -683,7 +699,7 @@ LUA_FUNCTION_STATIC( EnablePacketValidation )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 	packet_validation_enabled = LUA->GetBool( 1 );
-	SetDetourStatus( packet_validation_enabled );
+	SetReceiveDetourStatus( packet_validation_enabled );
 	return 0;
 }
 
@@ -691,7 +707,7 @@ LUA_FUNCTION_STATIC( EnableThreadedSocket )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 	threaded_socket_enabled = LUA->GetBool( 1 );
-	SetDetourStatus( threaded_socket_enabled );
+	SetReceiveDetourStatus( threaded_socket_enabled );
 	return 0;
 }
 
@@ -748,6 +764,8 @@ LUA_FUNCTION_STATIC( EnablePacketSampling )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 
+	AUTO_LOCK( packet_sampling_mutex );
+
 	packet_sampling_enabled = LUA->GetBool( 1 );
 	if( !packet_sampling_enabled )
 		packet_sampling_queue.clear( );
@@ -757,6 +775,8 @@ LUA_FUNCTION_STATIC( EnablePacketSampling )
 
 LUA_FUNCTION_STATIC( GetSamplePacket )
 {
+	AUTO_LOCK( packet_sampling_mutex );
+
 	if( packet_sampling_queue.empty( ) )
 		return 0;
 
@@ -770,8 +790,6 @@ LUA_FUNCTION_STATIC( GetSamplePacket )
 
 void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
-	lua = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
-
 	if( !server_loader.IsValid( ) )
 		LUA->ThrowError( "unable to get server factory" );
 
@@ -799,47 +817,28 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 	if( globalvars == nullptr )
 		LUA->ThrowError( "failed to load required CGlobalVars interface" );
 
-	SymbolFinder symfinder;
+	netsockets_t *net_sockets = nullptr;
 
-	CreateInterfaceFn factory = reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
-		dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
-	) );
-	if( factory == nullptr )
 	{
-		IFileSystem **filesystem_ptr = reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
-			dedicated_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+		SymbolFinder symfinder;
+
+		CreateInterfaceFn factory = reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
+			dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
 		) );
-		filesystem = filesystem_ptr != nullptr ? *filesystem_ptr : nullptr;
-	}
-	else
-	{
-		filesystem = static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
-	}
+		if( factory == nullptr )
+		{
+			IFileSystem **filesystem_ptr = reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
+				dedicated_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+			) );
+			filesystem = filesystem_ptr != nullptr ? *filesystem_ptr : nullptr;
+		}
+		else
+		{
+			filesystem =
+				static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
+		}
 
-	if( filesystem == nullptr )
-		LUA->ThrowError( "failed to initialize IFileSystem" );
-
-	server =
-
-#if defined __linux || defined __APPLE__
-
-		reinterpret_cast<IServer *>
-
-#else
-
-		*reinterpret_cast<IServer **>
-
-#endif
-
-		( symfinder.ResolveOnBinary(
-			global::engine_lib.c_str( ),
-			IServer_sig,
-			IServer_siglen
-		) );
-	if( server == nullptr )
-		LUA->ThrowError( "failed to locate IServer" );
-
-	netsockets_t *net_sockets =
+		net_sockets =
 
 #if defined __linux || defined __APPLE__
 
@@ -851,11 +850,16 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 
 #endif
 
-		( symfinder.ResolveOnBinary(
-			global::engine_lib.c_str( ),
-			net_sockets_sig,
-			net_sockets_siglen
-		) );
+			( symfinder.ResolveOnBinary(
+				global::engine_binary.c_str( ),
+				net_sockets_sig,
+				net_sockets_siglen
+			) );
+	}
+
+	if( filesystem == nullptr )
+		LUA->ThrowError( "failed to initialize IFileSystem" );
+
 	if( net_sockets == nullptr )
 		LUA->ThrowError( "got an invalid pointer to net_sockets" );
 
@@ -864,7 +868,7 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 		LUA->ThrowError( "got an invalid server socket" );
 
 	threaded_socket_execute = true;
-	threaded_socket_handle = CreateSimpleThread( Hook_recvfrom_thread, nullptr );
+	threaded_socket_handle = CreateSimpleThread( PacketReceiverThread, nullptr );
 	if( threaded_socket_handle == nullptr )
 		LUA->ThrowError( "unable to create thread" );
 
@@ -879,13 +883,18 @@ int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 #if defined _WIN32
 
-		CSteamGameServerAPIContext **gameserver_context_pointer = reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
-			server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
-		) );
+		CSteamGameServerAPIContext **gameserver_context_pointer =
+			reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
+				server_binary.c_str( ),
+				SteamGameServerAPIContext_sym,
+				SteamGameServerAPIContext_symlen
+			) );
 		if( gameserver_context_pointer == nullptr )
 		{
 			LUA->PushNil( );
-			LUA->PushString( "Failed to load required CSteamGameServerAPIContext interface pointer." );
+			LUA->PushString(
+				"Failed to load required CSteamGameServerAPIContext interface pointer."
+			);
 			return 2;
 		}
 
@@ -893,9 +902,12 @@ int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 #else
 
-		gameserver_context = reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
-			server_binary.c_str( ), SteamGameServerAPIContext_sym, SteamGameServerAPIContext_symlen
-		) );
+		gameserver_context =
+			reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
+				server_binary.c_str( ),
+				SteamGameServerAPIContext_sym,
+				SteamGameServerAPIContext_symlen
+			) );
 
 #endif
 

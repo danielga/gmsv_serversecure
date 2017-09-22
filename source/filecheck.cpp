@@ -1,257 +1,243 @@
 #include <filecheck.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <GarrysMod/Lua/LuaInterface.h>
+#include <GarrysMod/LuaHelpers.hpp>
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
-#include <symbolfinder.hpp>
-#include <detours.h>
 #include <networkstringtabledefs.h>
-#include <strtools.h>
 #include <cstring>
+#include <strtools.h>
+#include <scanning/symbolfinder.hpp>
+#include <detouring/classproxy.hpp>
 
 namespace filecheck
 {
 
-enum ValidationMode
+class CNetChanProxy
 {
-	ValidationModeNone,
-	ValidationModeFixed,
-	ValidationModeLua
-};
-
-#if defined _WIN32
-
-static const char IsValidFileForTransfer_sig[] = "\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x80";
-static const size_t IsValidFileForTransfer_siglen = sizeof( IsValidFileForTransfer_sig ) - 1;
-
-#elif defined __linux
-
-static const char IsValidFileForTransfer_sig[] = "@_ZN8CNetChan22IsValidFileForTransferEPKc";
-static const size_t IsValidFileForTransfer_siglen = 0;
-
-#elif defined __APPLE__
-
-static const char IsValidFileForTransfer_sig[] = "@_ZN8CNetChan22IsValidFileForTransferEPKc";
-static const size_t IsValidFileForTransfer_siglen = 0;
-
-#endif
-
-typedef bool( *IsValidFileForTransfer_t )( const char *file );
-
-static IsValidFileForTransfer_t IsValidFileForTransfer = nullptr;
-static MologieDetours::Detour<IsValidFileForTransfer_t> *IsValidFileForTransfer_detour = nullptr;
-
-static INetworkStringTable *downloads = nullptr;
-static const char *downloads_dir = "downloads" CORRECT_PATH_SEPARATOR_S;
-
-static GarrysMod::Lua::ILuaInterface *lua_interface = nullptr;
-static ValidationMode validation_mode = ValidationModeNone;
-static const char *hook_name = "IsValidFileForTransfer";
-
-static bool PushDebugTraceback( GarrysMod::Lua::ILuaInterface *lua )
-{
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "debug" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+private:
+	enum ValidationMode
 	{
-		lua->ErrorNoHalt( "[ServerSecure] Global debug is not a table!\n" );
-		lua->Pop( 1 );
-		return false;
+		ValidationModeNone,
+		ValidationModeFixed,
+		ValidationModeLua
+	};
+
+public:
+	void Initialize( GarrysMod::Lua::ILuaBase *LUA )
+	{
+		lua_interface = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
+
+		{
+			SymbolFinder symfinder;
+
+			IsValidFileForTransfer_original =
+				reinterpret_cast<IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
+					global::engine_binary.c_str( ),
+					IsValidFileForTransfer_sig,
+					IsValidFileForTransfer_siglen
+				) );
+		}
+
+		if( IsValidFileForTransfer_original == nullptr )
+			LUA->ThrowError( "unable to find CNetChan::IsValidFileForTransfer" );
+
+		if( !hook.Create( IsValidFileForTransfer_original, &CNetChanProxy::IsValidFileForTransfer ) )
+			LUA->ThrowError( "unable to create detour for CNetChan::IsValidFileForTransfer" );
+
+		INetworkStringTableContainer *networkstringtable =
+			global::engine_loader.GetInterface<INetworkStringTableContainer>(
+				INTERFACENAME_NETWORKSTRINGTABLESERVER
+			);
+		if( networkstringtable == nullptr )
+			LUA->ThrowError( "unable to get INetworkStringTableContainer" );
+
+		downloads = networkstringtable->FindTable( "downloadables" );
+		if( downloads == nullptr )
+			LUA->ThrowError( "missing \"downloadables\" string table" );
 	}
 
-	lua->GetField( -1, "traceback" );
-	lua->Remove( -2 );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 	{
-		lua->ErrorNoHalt( "[ServerSecure] Global debug.traceback is not a function!\n" );
-		lua->Pop( 1 );
-		return false;
+		LUA->PushCFunction( EnableFileValidation );
+		LUA->SetField( -2, "EnableFileValidation" );
+		return 0;
 	}
 
-	return true;
-}
-
-inline bool PushHookRun( GarrysMod::Lua::ILuaInterface *lua )
-{
-	if( !PushDebugTraceback( lua ) )
-		return false;
-
-	lua->GetField( GarrysMod::Lua::INDEX_GLOBAL, "hook" );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
+	void Deinitialize( GarrysMod::Lua::ILuaBase * )
 	{
-		lua->ErrorNoHalt( "[ServerSecure] Global hook is not a table!\n" );
-		lua->Pop( 2 );
-		return false;
+		hook.Disable( );
 	}
 
-	lua->GetField( -1, "Run" );
-	lua->Remove( -2 );
-	if( !lua->IsType( -1, GarrysMod::Lua::Type::FUNCTION ) )
+	static bool SetFileDetourStatus( ValidationMode mode )
 	{
-		lua->ErrorNoHalt( "[ServerSecure] Global hook.Run is not a function!\n" );
-		lua->Pop( 2 );
-		return false;
-	}
-
-	return true;
-}
-
-inline bool BlockDownload( const char *filepath )
-{
-	DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
-	return false;
-}
-
-static bool IsValidFileForTransfer_d( const char *filepath )
-{
-	if( filepath == nullptr )
-	{
-		DebugWarning( "[ServerSecure] Invalid file to download (string pointer was NULL)\n" );
-		return false;
-	}
-
-	size_t len = std::strlen( filepath );
-	if( len == 0 )
-	{
-		DebugWarning( "[ServerSecure] Invalid file to download (path length was 0)\n" );
-		return false;
-	}
-
-	if( validation_mode == ValidationModeLua )
-	{
-		if( !PushHookRun( lua_interface ) )
-			return false;
-
-		lua_interface->PushString( hook_name );
-		lua_interface->PushString( filepath );
-
-		bool valid = true;
-		if( lua_interface->PCall( 2, 1, -4 ) != 0 )
-			lua_interface->Msg( "\n[ERROR] %s\n\n", lua_interface->GetString( -1 ) );
-		else if( lua_interface->IsType( -1, GarrysMod::Lua::Type::BOOL ) )
-			valid = lua_interface->GetBool( -1 );
-
-		lua_interface->Pop( 2 );
-
-		return valid;
-	}
-
-	std::string nicefile( filepath, len );
-	if( !V_RemoveDotSlashes( &nicefile[0] ) )
-		return BlockDownload( filepath );
-
-	len = std::strlen( nicefile.c_str( ) );
-	nicefile.resize( len );
-	filepath = nicefile.c_str( );
-
-	DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
-
-	if( !IsValidFileForTransfer( filepath ) )
-		return BlockDownload( filepath );
-
-	int32_t index = downloads->FindStringIndex( filepath );
-	if( index != INVALID_STRING_INDEX )
-		return true;
-
-	if( len == 22 && std::strncmp( filepath, downloads_dir, 10 ) == 0 && std::strncmp( filepath + len - 4, ".dat", 4 ) == 0 )
-		return true;
-
-	return BlockDownload( filepath );
-}
-
-inline bool SetDetourStatus( ValidationMode mode )
-{
-	if( mode != ValidationModeNone && IsValidFileForTransfer_detour == nullptr )
-	{
-		IsValidFileForTransfer_detour = new( std::nothrow ) MologieDetours::Detour<IsValidFileForTransfer_t>(
-			IsValidFileForTransfer,
-			IsValidFileForTransfer_d
-		);
-		if( IsValidFileForTransfer_detour != nullptr )
+		if( mode != ValidationModeNone ? hook.Enable( ) : hook.Disable( ) )
 		{
 			validation_mode = mode;
 			return true;
 		}
+
+		return false;
 	}
 
-	if( mode == ValidationModeNone && IsValidFileForTransfer_detour != nullptr )
+	LUA_FUNCTION_STATIC_DECLARE( EnableFileValidation )
 	{
-		delete IsValidFileForTransfer_detour;
-		IsValidFileForTransfer_detour = nullptr;
-		validation_mode = mode;
-		return true;
+		GarrysMod::Lua::ILuaBase *LUA = L->luabase;
+		LUA->SetState( L );
+
+		if( LUA->Top( ) < 1 )
+			LUA->ArgError( 1, "boolean or number expected, got nil" );
+
+		ValidationMode mode = ValidationModeFixed;
+		if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
+		{
+			mode = LUA->GetBool( 1 ) ? ValidationModeFixed : ValidationModeNone;
+		}
+		else if( LUA->IsType( 1, GarrysMod::Lua::Type::NUMBER ) )
+		{
+			int32_t num = static_cast<int32_t>( LUA->GetNumber( 1 ) );
+			if( num < 0 || num > 2 )
+				LUA->ArgError( 1, "invalid mode value, must be 0, 1 or 2" );
+
+			mode = static_cast<ValidationMode>( num );
+		}
+		else
+		{
+			LUA->ArgError( 1, "boolean or number expected" );
+		}
+
+		LUA->PushBool( SetFileDetourStatus( mode ) );
+		return 1;
 	}
 
-	return false;
-}
-
-LUA_FUNCTION_STATIC( EnableFileValidation )
-{
-	if( LUA->Top( ) < 1 )
-		LUA->ArgError( 1, "boolean or number expected, got nil" );
-
-	ValidationMode mode = ValidationModeFixed;
-	if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
+	static bool Call( const char *filepath )
 	{
-		mode = LUA->GetBool( 1 ) ? ValidationModeFixed : ValidationModeNone;
-	}
-	else if( LUA->IsType( 1, GarrysMod::Lua::Type::NUMBER ) )
-	{
-		int32_t num = static_cast<int32_t>( LUA->GetNumber( 1 ) );
-		if( num < 0 || num > 2 )
-			LUA->ArgError( 1, "invalid mode value, must be 0, 1 or 2" );
-
-		mode = static_cast<ValidationMode>( num );
-	}
-	else
-	{
-		LUA->ArgError( 1, "boolean or number expected" );
+		return hook.GetTrampoline<IsValidFileForTransfer_t>( )( filepath );
 	}
 
-	LUA->PushBool( SetDetourStatus( mode ) );
-	return 1;
-}
+	static bool BlockDownload( const char *filepath )
+	{
+		DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
+		return false;
+	}
+
+	static bool IsValidFileForTransfer( const char *filepath )
+	{
+		if( filepath == nullptr )
+			return BlockDownload(
+				"[ServerSecure] Invalid file to download (string pointer was NULL)\n"
+			);
+
+		std::string nicefile( filepath );
+		if( nicefile.empty( ) )
+			return BlockDownload(
+				"[ServerSecure] Invalid file to download (path length was 0)\n"
+			);
+
+		if( validation_mode == ValidationModeLua )
+		{
+			if( !LuaHelpers::PushHookRun( lua_interface, file_hook_name ) )
+				return Call( filepath );
+
+			lua_interface->PushString( filepath );
+
+			bool valid = true;
+			if( LuaHelpers::CallHookRun( lua_interface, 1, 1 ) )
+			{
+				if( lua_interface->IsType( -1, GarrysMod::Lua::Type::BOOL ) )
+					valid = lua_interface->GetBool( -1 );
+
+				lua_interface->Pop( 1 );
+			}
+
+			return valid;
+		}
+
+		if( !V_RemoveDotSlashes( &nicefile[0] ) )
+			return BlockDownload( filepath );
+
+		nicefile.resize( std::strlen( nicefile.c_str( ) ) );
+		filepath = nicefile.c_str( );
+
+		DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
+
+		if( !Call( filepath ) )
+			return BlockDownload( filepath );
+
+		int32_t index = downloads->FindStringIndex( filepath );
+		if( index != INVALID_STRING_INDEX )
+			return true;
+
+		if( nicefile.size( ) == 22 &&
+			std::strncmp( filepath, downloads_dir, 10 ) == 0 &&
+			std::strncmp( filepath + nicefile.size( ) - 4, ".dat", 4 ) == 0 )
+			return true;
+
+		return BlockDownload( filepath );
+	}
+
+	static ValidationMode validation_mode;
+
+private:
+	typedef bool ( *IsValidFileForTransfer_t )( const char *file );
+
+	IsValidFileForTransfer_t IsValidFileForTransfer_original;
+
+	static const char IsValidFileForTransfer_sig[];
+	static const size_t IsValidFileForTransfer_siglen;
+	static const char file_hook_name[];
+	static const char downloads_dir[];
+
+	static GarrysMod::Lua::ILuaInterface *lua_interface;
+	static INetworkStringTable *downloads;
+	static Detouring::Hook hook;
+};
+
+#if defined _WIN32
+
+const char CNetChanProxy::IsValidFileForTransfer_sig[] =
+	"\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x80\x3B";
+const size_t CNetChanProxy::IsValidFileForTransfer_siglen =
+	sizeof( CNetChanProxy::IsValidFileForTransfer_sig ) - 1;
+
+#elif defined __linux
+
+const char CNetChanProxy::IsValidFileForTransfer_sig[] =
+	"@_ZN8CNetChan22IsValidFileForTransferEPKc";
+const size_t CNetChanProxy::IsValidFileForTransfer_siglen = 0;
+
+#elif defined __APPLE__
+
+const char CNetChanProxy::IsValidFileForTransfer_sig[] =
+	"@__ZN8CNetChan22IsValidFileForTransferEPKc";
+const size_t CNetChanProxy::IsValidFileForTransfer_siglen = 0;
+
+#endif
+
+const char CNetChanProxy::file_hook_name[] = "IsValidFileForTransfer";
+const char CNetChanProxy::downloads_dir[] = "downloads" CORRECT_PATH_SEPARATOR_S;
+CNetChanProxy::ValidationMode CNetChanProxy::validation_mode = ValidationModeNone;
+
+GarrysMod::Lua::ILuaInterface *CNetChanProxy::lua_interface = nullptr;
+INetworkStringTable *CNetChanProxy::downloads = nullptr;
+Detouring::Hook CNetChanProxy::hook;
+
+static CNetChanProxy netchan_proxy;
 
 void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
-	lua_interface = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
-
-	INetworkStringTableContainer *networkstringtable = global::engine_loader.GetInterface<INetworkStringTableContainer>(
-		INTERFACENAME_NETWORKSTRINGTABLESERVER
-	);
-	if( networkstringtable == nullptr )
-		LUA->ThrowError( "unable to get INetworkStringTableContainer" );
-
-	downloads = networkstringtable->FindTable( "downloadables" );
-	if( downloads == nullptr )
-		LUA->ThrowError( "missing \"downloadables\" string table" );
-
-	SymbolFinder symfinder;
-	IsValidFileForTransfer = reinterpret_cast<IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
-		global::engine_lib.c_str( ),
-		IsValidFileForTransfer_sig,
-		IsValidFileForTransfer_siglen
-	) );
-	if( IsValidFileForTransfer == nullptr )
-		LUA->ThrowError( "unable to sigscan for CNetChan::IsValidFileForTransfer" );
+	netchan_proxy.Initialize( LUA );
 }
 
 int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
-	LUA->PushCFunction( EnableFileValidation );
-	LUA->SetField( -2, "EnableFileValidation" );
-
-	return 0;
+	return netchan_proxy.PostInitialize( LUA );
 }
 
-void Deinitialize( GarrysMod::Lua::ILuaBase * )
+void Deinitialize( GarrysMod::Lua::ILuaBase *LUA )
 {
-	if( IsValidFileForTransfer != nullptr )
-	{
-		delete IsValidFileForTransfer_detour;
-		IsValidFileForTransfer_detour = nullptr;
-	}
+	netchan_proxy.Deinitialize( LUA );
 }
 
 }
