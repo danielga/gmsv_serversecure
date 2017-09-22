@@ -43,7 +43,8 @@ public:
 		if( IsValidFileForTransfer_original == nullptr )
 			LUA->ThrowError( "unable to find CNetChan::IsValidFileForTransfer" );
 
-		if( !hook.Create( IsValidFileForTransfer_original, &CNetChanProxy::IsValidFileForTransfer ) )
+		if( !hook.Create( reinterpret_cast<void *>( IsValidFileForTransfer_original ),
+			reinterpret_cast<void *>( &CNetChanProxy::IsValidFileForTransfer ) ) )
 			LUA->ThrowError( "unable to create detour for CNetChan::IsValidFileForTransfer" );
 
 		INetworkStringTableContainer *networkstringtable =
