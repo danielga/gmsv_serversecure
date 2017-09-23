@@ -19,7 +19,6 @@
 
 #if defined _WIN32
 
-#define VC_EXTRALEAN
 #define WIN32_LEAN_AND_MEAN
 
 #include <WinSock2.h>
@@ -46,17 +45,19 @@ typedef std::unordered_set<uint32_t> set_uint32;
 #include <arpa/inet.h>
 #include <errno.h>
 
-#if ( __GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ ) >= 40300
-
-#include <unordered_set>
-
-typedef std::unordered_set<uint32_t> set_uint32;
-
-#else
+#if !defined __clang__ && \
+	defined __GNUC__ && \
+	( __GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ ) < 40300
 
 #include <set>
 
 typedef std::set<uint32_t> set_uint32;
+
+#else
+
+#include <unordered_set>
+
+typedef std::unordered_set<uint32_t> set_uint32;
 
 #endif
 
