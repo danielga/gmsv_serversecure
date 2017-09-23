@@ -312,7 +312,7 @@ static void BuildReplyInfo( )
 
 	info_cache_packet.WriteByte( global::server->GetNumClients( ) );
 	int32_t maxplayers = sv_visiblemaxplayers != nullptr ? sv_visiblemaxplayers->GetInt( ) : -1;
-	if( maxplayers != -1 && maxplayers < reply_info.max_clients )
+	if( maxplayers <= 0 || maxplayers < reply_info.max_clients )
 		maxplayers = reply_info.max_clients;
 	info_cache_packet.WriteByte( maxplayers );
 	info_cache_packet.WriteByte( global::server->GetNumFakeClients( ) );
