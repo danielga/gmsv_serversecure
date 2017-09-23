@@ -884,8 +884,6 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 				SteamGameServerAPIContext_symlen
 			) );
 
-		gameserver_context_pointer = &gameserver_context;
-
 #endif
 
 		if( gameserver_context == nullptr )
