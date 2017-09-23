@@ -10,6 +10,7 @@
 #include <strtools.h>
 #include <scanning/symbolfinder.hpp>
 #include <detouring/classproxy.hpp>
+#include <Platform.hpp>
 
 namespace filecheck
 {
@@ -195,20 +196,20 @@ private:
 	static Detouring::Hook hook;
 };
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 const char CNetChanProxy::IsValidFileForTransfer_sig[] =
 	"\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x80\x3B";
 const size_t CNetChanProxy::IsValidFileForTransfer_siglen =
 	sizeof( CNetChanProxy::IsValidFileForTransfer_sig ) - 1;
 
-#elif defined __linux
+#elif defined SYSTEM_LINUX
 
 const char CNetChanProxy::IsValidFileForTransfer_sig[] =
 	"@_ZN8CNetChan22IsValidFileForTransferEPKc";
 const size_t CNetChanProxy::IsValidFileForTransfer_siglen = 0;
 
-#elif defined __APPLE__
+#elif defined SYSTEM_MACOSX
 
 const char CNetChanProxy::IsValidFileForTransfer_sig[] =
 	"@__ZN8CNetChan22IsValidFileForTransferEPKc";

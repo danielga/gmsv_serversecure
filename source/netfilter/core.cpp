@@ -16,17 +16,16 @@
 #include <steam/steam_gameserver.h>
 #include <game/server/iplayerinfo.h>
 #include <scanning/symbolfinder.hpp>
+#include <Platform.hpp>
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 #define WIN32_LEAN_AND_MEAN
 
 #include <WinSock2.h>
 #include <unordered_set>
 
-typedef std::unordered_set<uint32_t> set_uint32;
-
-#elif defined __linux
+#elif defined SYSTEM_LINUX
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -35,9 +34,7 @@ typedef std::unordered_set<uint32_t> set_uint32;
 #include <errno.h>
 #include <unordered_set>
 
-typedef std::unordered_set<uint32_t> set_uint32;
-
-#elif defined __APPLE__
+#elif defined SYSTEM_MACOSX
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -45,19 +42,13 @@ typedef std::unordered_set<uint32_t> set_uint32;
 #include <arpa/inet.h>
 #include <errno.h>
 
-#if !defined __clang__ && \
-	defined __GNUC__ && \
-	( __GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ ) < 40300
+#ifdef SYSTEM_MACOSX_BAD
 
 #include <set>
-
-typedef std::set<uint32_t> set_uint32;
 
 #else
 
 #include <unordered_set>
-
-typedef std::unordered_set<uint32_t> set_uint32;
 
 #endif
 
@@ -67,6 +58,16 @@ class CBaseServer;
 
 namespace netfilter
 {
+
+#ifdef SYSTEM_MACOSX_BAD
+
+	typedef std::set<uint32_t> set_uint32;
+
+#else
+
+	typedef std::unordered_set<uint32_t> set_uint32;
+
+#endif
 
 typedef int32_t ( *Hook_recvfrom_t )(
 	int32_t s,
@@ -129,7 +130,7 @@ public:
 
 typedef CUtlVector<netsocket_t> netsockets_t;
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 static const char SteamGameServerAPIContext_sym[] =
 	"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
@@ -149,7 +150,7 @@ static size_t net_sockets_siglen = sizeof( net_sockets_sig ) - 1;
 
 static const char operating_system_char = 'w';
 
-#elif defined __linux
+#elif defined SYSTEM_LINUX
 
 static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
@@ -165,7 +166,7 @@ static const size_t net_sockets_siglen = 0;
 
 static const char operating_system_char = 'l';
 
-#elif defined __APPLE__
+#elif defined SYSTEM_MACOX
 
 static const char SteamGameServerAPIContext_sym[] = "@__ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
@@ -486,11 +487,11 @@ inline int32_t HandleNetError( int32_t value )
 {
 	if( value == -1 )
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 		WSASetLastError( WSAEWOULDBLOCK );
 
-#elif defined __linux || defined __APPLE__
+#elif defined SYSTEM_POSIX
 
 		errno = EWOULDBLOCK;
 
@@ -841,7 +842,7 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 
 		net_sockets =
 
-#if defined __linux || defined __APPLE__
+#if defined SYSTEM_POSIX
 
 		reinterpret_cast<netsockets_t *>
 
@@ -882,7 +883,7 @@ int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 	{
 		SymbolFinder symfinder;
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 		CSteamGameServerAPIContext **gameserver_context_pointer =
 			reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(

@@ -4,22 +4,23 @@
 #include <GarrysMod/Lua/Interface.h>
 #include <scanning/symbolfinder.hpp>
 #include <iserver.h>
+#include <Platform.hpp>
 
 namespace global
 {
 
-#if defined _WIN32
+#if defined SYSTEM_WINDOWS
 
 static const char IServer_sig[] =
 	"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
 static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
-#elif defined __linux
+#elif defined SYSTEM_LINUX
 
 static const char IServer_sig[] = "@sv";
 static const size_t IServer_siglen = 0;
 
-#elif defined __APPLE__
+#elif defined SYSTEM_MACOSX
 
 static const char IServer_sig[] = "@_sv";
 static const size_t IServer_siglen = 0;
@@ -70,7 +71,7 @@ static void PreInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 		server =
 
-#if defined __linux || defined __APPLE__
+#if defined SYSTEM_POSIX
 
 			reinterpret_cast<IServer *>
 
