@@ -311,9 +311,10 @@ static void BuildReplyInfo( )
 	info_cache_packet.WriteShort( appid );
 
 	info_cache_packet.WriteByte( global::server->GetNumClients( ) );
-	info_cache_packet.WriteByte( sv_visiblemaxplayers != nullptr ?
-		sv_visiblemaxplayers->GetInt( ) :
-		reply_info.max_clients );
+	int32_t maxplayers = sv_visiblemaxplayers != nullptr ? sv_visiblemaxplayers->GetInt( ) : -1;
+	if( maxplayers != -1 && maxplayers < reply_info.max_clients )
+		maxplayers = reply_info.max_clients;
+	info_cache_packet.WriteByte( maxplayers );
 	info_cache_packet.WriteByte( global::server->GetNumFakeClients( ) );
 	info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 	info_cache_packet.WriteByte( operating_system_char );
@@ -605,8 +606,9 @@ static uint32_t PacketReceiverThread( void * )
 
 		FD_ZERO( &readables );
 		FD_SET( game_socket, &readables );
-		if( select( game_socket + 1, &readables, nullptr, nullptr, &ms100 ) == -1 ||
-			!FD_ISSET( game_socket, &readables ) )
+		int res = select( game_socket + 1, &readables, nullptr, nullptr, &ms100 );
+		ms100.tv_usec = 100000;
+		if( res == -1 || !FD_ISSET( game_socket, &readables ) )
 			continue;
 
 		packet_t p;
@@ -857,6 +859,37 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 				net_sockets_sig,
 				net_sockets_siglen
 			) );
+
+#if defined SYSTEM_WINDOWS
+
+		CSteamGameServerAPIContext **gameserver_context_pointer =
+			reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
+				server_binary.c_str( ),
+				SteamGameServerAPIContext_sym,
+				SteamGameServerAPIContext_symlen
+			) );
+		if( gameserver_context_pointer == nullptr )
+			LUA->ThrowError(
+				"Failed to load required CSteamGameServerAPIContext interface pointer."
+			);
+
+		gameserver_context = *gameserver_context_pointer;
+
+#else
+
+		gameserver_context =
+			reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
+				server_binary.c_str( ),
+				SteamGameServerAPIContext_sym,
+				SteamGameServerAPIContext_symlen
+			) );
+
+		gameserver_context_pointer = &gameserver_context;
+
+#endif
+
+		if( gameserver_context == nullptr )
+			LUA->ThrowError( "Failed to load required CSteamGameServerAPIContext interface." );
 	}
 
 	if( filesystem == nullptr )
@@ -873,53 +906,6 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 	threaded_socket_handle = CreateSimpleThread( PacketReceiverThread, nullptr );
 	if( threaded_socket_handle == nullptr )
 		LUA->ThrowError( "unable to create thread" );
-
-	BuildStaticReplyInfo( );
-}
-
-int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
-{
-	if( gameserver_context == nullptr )
-	{
-		SymbolFinder symfinder;
-
-#if defined SYSTEM_WINDOWS
-
-		CSteamGameServerAPIContext **gameserver_context_pointer =
-			reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
-				server_binary.c_str( ),
-				SteamGameServerAPIContext_sym,
-				SteamGameServerAPIContext_symlen
-			) );
-		if( gameserver_context_pointer == nullptr )
-		{
-			LUA->PushNil( );
-			LUA->PushString(
-				"Failed to load required CSteamGameServerAPIContext interface pointer."
-			);
-			return 2;
-		}
-
-		gameserver_context = *gameserver_context_pointer;
-
-#else
-
-		gameserver_context =
-			reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
-				server_binary.c_str( ),
-				SteamGameServerAPIContext_sym,
-				SteamGameServerAPIContext_symlen
-			) );
-
-#endif
-
-		if( gameserver_context == nullptr )
-		{
-			LUA->PushNil( );
-			LUA->PushString( "Failed to load required CSteamGameServerAPIContext interface." );
-			return 2;
-		}
-	}
 
 	BuildStaticReplyInfo( );
 
@@ -979,8 +965,6 @@ int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	LUA->PushCFunction( GetSamplePacket );
 	LUA->SetField( -2, "GetSamplePacket" );
-
-	return 0;
 }
 
 void Deinitialize( GarrysMod::Lua::ILuaBase * )

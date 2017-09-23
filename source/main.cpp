@@ -30,37 +30,10 @@ static const size_t IServer_siglen = 0;
 SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
 std::string engine_binary = Helpers::GetBinaryFileName( "engine", false, true, "bin/" );
 IServer *server = nullptr;
-static bool post_initialized = false;
 
 LUA_FUNCTION_STATIC( GetClientCount )
 {
 	LUA->PushNumber( server->GetClientCount( ) );
-	return 1;
-}
-
-LUA_FUNCTION_STATIC( PostInitialize )
-{
-	if( !post_initialized )
-	{
-		LUA->GetField( GarrysMod::Lua::INDEX_GLOBAL, "serversecure" );
-		if( !LUA->IsType( -1, GarrysMod::Lua::Type::TABLE ) )
-			LUA->ThrowError( "EVEN NOW, THE EVIL SEED OF WHAT YOU'VE DONE GERMINATES WITHIN YOU" );
-
-		LUA->PushCFunction( GetClientCount );
-		LUA->SetField( -2, "GetClientCount" );
-
-		int32_t nrets = netfilter::PostInitialize( LUA );
-		if( nrets != 0 )
-			return nrets;
-
-		nrets = filecheck::PostInitialize( LUA );
-		if( nrets != 0 )
-			return nrets;
-
-		post_initialized = true;
-	}
-
-	LUA->PushBool( true );
 	return 1;
 }
 
@@ -93,17 +66,15 @@ static void PreInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.5.12" );
+	LUA->PushString( "serversecure 1.5.13" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10512 );
+	LUA->PushNumber( 10513 );
 	LUA->SetField( -2, "VersionNum" );
 
-	LUA->PushCFunction( PostInitialize );
-	LUA->SetField( -2, "PostInitialize" );
-
-	post_initialized = false;
+	LUA->PushCFunction( GetClientCount );
+	LUA->SetField( -2, "GetClientCount" );
 }
 
 static void Initialize( GarrysMod::Lua::ILuaBase *LUA )

@@ -58,13 +58,9 @@ public:
 		downloads = networkstringtable->FindTable( "downloadables" );
 		if( downloads == nullptr )
 			LUA->ThrowError( "missing \"downloadables\" string table" );
-	}
 
-	int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
-	{
 		LUA->PushCFunction( EnableFileValidation );
 		LUA->SetField( -2, "EnableFileValidation" );
-		return 0;
 	}
 
 	void Deinitialize( GarrysMod::Lua::ILuaBase * )
@@ -230,11 +226,6 @@ static CNetChanProxy netchan_proxy;
 void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 {
 	netchan_proxy.Initialize( LUA );
-}
-
-int32_t PostInitialize( GarrysMod::Lua::ILuaBase *LUA )
-{
-	return netchan_proxy.PostInitialize( LUA );
 }
 
 void Deinitialize( GarrysMod::Lua::ILuaBase *LUA )
