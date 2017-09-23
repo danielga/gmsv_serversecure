@@ -166,7 +166,7 @@ static const size_t net_sockets_siglen = 0;
 
 static const char operating_system_char = 'l';
 
-#elif defined SYSTEM_MACOX
+#elif defined SYSTEM_MACOSX
 
 static const char SteamGameServerAPIContext_sym[] = "@__ZL27s_SteamGameServerAPIContext";
 static const size_t SteamGameServerAPIContext_symlen = 0;
