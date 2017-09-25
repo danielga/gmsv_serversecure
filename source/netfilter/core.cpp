@@ -166,6 +166,10 @@ static const size_t net_sockets_siglen = 0;
 
 static const char operating_system_char = 'l';
 
+typedef int SOCKET;
+
+static const SOCKET INVALID_SOCKET = -1;
+
 #elif defined SYSTEM_MACOSX
 
 static const char SteamGameServerAPIContext_sym[] = "@__ZL27s_SteamGameServerAPIContext";
@@ -182,6 +186,10 @@ static const size_t net_sockets_siglen = 0;
 
 static const char operating_system_char = 'm';
 
+typedef int SOCKET;
+
+static const SOCKET INVALID_SOCKET = -1;
+
 #endif
 
 static std::string server_binary =
@@ -196,7 +204,7 @@ static std::string dedicated_binary =
 static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
 
 static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
-static int32_t game_socket = -1;
+static SOCKET game_socket = INVALID_SOCKET;
 
 static bool packet_validation_enabled = false;
 
@@ -897,7 +905,7 @@ void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 		LUA->ThrowError( "got an invalid pointer to net_sockets" );
 
 	game_socket = net_sockets->Element( 1 ).hUDP;
-	if( game_socket == -1 )
+	if( game_socket == INVALID_SOCKET )
 		LUA->ThrowError( "got an invalid server socket" );
 
 	threaded_socket_execute = true;
