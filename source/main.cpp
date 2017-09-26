@@ -66,11 +66,11 @@ static void PreInitialize( GarrysMod::Lua::ILuaBase *LUA )
 
 	LUA->CreateTable( );
 
-	LUA->PushString( "serversecure 1.5.14" );
+	LUA->PushString( "serversecure 1.5.15" );
 	LUA->SetField( -2, "Version" );
 
 	// version num follows LuaJIT style, xxyyzz
-	LUA->PushNumber( 10514 );
+	LUA->PushNumber( 10515 );
 	LUA->SetField( -2, "VersionNum" );
 
 	LUA->PushCFunction( GetClientCount );

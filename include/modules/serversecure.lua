@@ -12,7 +12,7 @@ function serversecure.IPToString(uint)
 		band(rshift(uint, 16), 0xFF),
 		band(rshift(uint, 8), 0xFF),
 		band(uint, 0xFF)
-	return format("%d.%d.%d.%d", a, b, c, d)
+	return format("%d.%d.%d.%d", d, c, b, a)
 end
 
 function serversecure.StringToIP(str)
@@ -25,7 +25,7 @@ function serversecure.StringToIP(str)
 		return
 	end
 
-	return ((a * 256 + b) * 256 + c) * 256 + d
+	return ((d * 256 + c) * 256 + b) * 256 + a
 end
 
 function serversecure.PostInitialize()

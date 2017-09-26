@@ -24,6 +24,7 @@
 
 #include <WinSock2.h>
 #include <unordered_set>
+#include <atomic>
 
 #elif defined SYSTEM_LINUX
 
@@ -33,6 +34,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <unordered_set>
+#include <atomic>
 
 #elif defined SYSTEM_MACOSX
 
@@ -49,6 +51,7 @@
 #else
 
 #include <unordered_set>
+#include <atomic>
 
 #endif
 
@@ -63,9 +66,34 @@ namespace netfilter
 
 	typedef std::set<uint32_t> set_uint32;
 
+	// Pray to the gods for guidance and hope this is enough.
+	class AtomicBool
+	{
+	public:
+		AtomicBool( bool v ) :
+			value( v )
+		{ }
+
+		operator bool( ) const
+		{
+			return __sync_fetch_and_or( &value, 0 );
+		}
+
+		AtomicBool &operator =( bool v )
+		{
+			__sync_bool_compare_and_swap( &value, !v, v );
+			return *this;
+		}
+
+	private:
+		bool value;
+	};
+
 #else
 
 	typedef std::unordered_set<uint32_t> set_uint32;
+
+	typedef std::atomic_bool AtomicBool;
 
 #endif
 
@@ -81,6 +109,7 @@ typedef int32_t ( *Hook_recvfrom_t )(
 struct packet_t
 {
 	packet_t( ) :
+		address( ),
 		address_size( sizeof( address ) )
 	{ }
 
@@ -215,10 +244,11 @@ static bool firewall_blacklist_enabled = false;
 static set_uint32 firewall_blacklist;
 
 static const size_t threaded_socket_max_queue = 1000;
-static bool threaded_socket_enabled = false;
-static bool threaded_socket_execute = true;
+static AtomicBool threaded_socket_enabled = false;
+static AtomicBool threaded_socket_execute = true;
 static ThreadHandle_t threaded_socket_handle = nullptr;
 static std::queue<packet_t> threaded_socket_queue;
+static CThreadFastMutex threaded_socket_mutex;
 
 static const char *default_game_version = "16.12.01";
 static const uint8_t default_proto_version = 17;
@@ -232,7 +262,7 @@ static uint32_t info_cache_time = 5;
 static ClientManager client_manager;
 
 static const size_t packet_sampling_max_queue = 50;
-static volatile bool packet_sampling_enabled = false;
+static AtomicBool packet_sampling_enabled = false;
 static std::deque<packet_t> packet_sampling_queue;
 static CThreadFastMutex packet_sampling_mutex;
 
@@ -371,7 +401,7 @@ inline PacketType SendInfoCache( const sockaddr_in &from, uint32_t time )
 	return PacketTypeInvalid; // we've handled it
 }
 
-static PacketType HandleInfoQuery( const sockaddr_in &from )
+inline PacketType HandleInfoQuery( const sockaddr_in &from )
 {
 	uint32_t time = static_cast<uint32_t>( globalvars->realtime );
 	if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
@@ -511,15 +541,13 @@ inline int32_t HandleNetError( int32_t value )
 
 inline packet_t GetQueuedPacket( )
 {
-	//bool full = threaded_socket_queue.size( ) >= thread_socket_max_queue;
+	AUTO_LOCK( threaded_socket_mutex );
 	packet_t p = threaded_socket_queue.front( );
 	threaded_socket_queue.pop( );
-	// maybe have an algorithm for when the queue is full
-	// drop certain packet types like queries
 	return p;
 }
 
-inline int32_t ReceiveAndAnalyzePacket(
+static int32_t ReceiveAndAnalyzePacket(
 	int32_t s,
 	char *buf,
 	int32_t buflen,
@@ -533,22 +561,21 @@ inline int32_t ReceiveAndAnalyzePacket(
 	if( len == -1 )
 		return -1;
 
+	if( packet_sampling_enabled )
 	{
+		packet_t p;
+		memcpy( &p.address, from, *fromlen );
+		p.address_size = *fromlen;
+		p.buffer.assign( buf, buf + len );
+
 		AUTO_LOCK( packet_sampling_mutex );
 
-		if( packet_sampling_enabled )
-		{
-			// there should only be packet_sampling_max_queue packets on the queue
-			// at the moment of this check
-			if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
-				packet_sampling_queue.pop_front( );
+		// there should only be packet_sampling_max_queue packets on the queue
+		// at the moment of this check
+		if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
+			packet_sampling_queue.pop_front( );
 
-			packet_t p;
-			memcpy( &p.address, from, *fromlen );
-			p.address_size = *fromlen;
-			p.buffer.assign( buf, buf + len );
-			packet_sampling_queue.push_back( p );
-		}
+		packet_sampling_queue.push_back( p );
 	}
 
 	if( !IsAddressAllowed( infrom ) )
@@ -564,6 +591,12 @@ inline int32_t ReceiveAndAnalyzePacket(
 	return len;
 }
 
+inline bool IsPacketQueueEmpty( )
+{
+	AUTO_LOCK( threaded_socket_mutex );
+	return threaded_socket_queue.empty( );
+}
+
 static int32_t Hook_recvfrom_detour(
 	int32_t s,
 	char *buf,
@@ -573,10 +606,11 @@ static int32_t Hook_recvfrom_detour(
 	int32_t *fromlen
 )
 {
-	if( !threaded_socket_enabled && threaded_socket_queue.empty( ) )
+	bool queue_empty = IsPacketQueueEmpty( );
+	if( !threaded_socket_enabled && queue_empty )
 		return HandleNetError( ReceiveAndAnalyzePacket( s, buf, buflen, flags, from, fromlen ) );
 
-	if( threaded_socket_queue.empty( ) )
+	if( queue_empty )
 		return HandleNetError( -1 );
 
 	packet_t p = GetQueuedPacket( );
@@ -595,6 +629,18 @@ static int32_t Hook_recvfrom_detour(
 	return len;
 }
 
+inline bool IsPacketQueueFull( )
+{
+	AUTO_LOCK( threaded_socket_mutex );
+	return threaded_socket_queue.size( ) >= threaded_socket_max_queue;
+}
+
+inline void PushPacketToQueue( const packet_t &p )
+{
+	AUTO_LOCK( threaded_socket_mutex );
+	threaded_socket_queue.push( p );
+}
+
 static uint32_t PacketReceiverThread( void * )
 {
 	timeval ms100 = { 0, 100000 };
@@ -603,8 +649,7 @@ static uint32_t PacketReceiverThread( void * )
 
 	while( threaded_socket_execute )
 	{
-		if( !threaded_socket_enabled ||
-			threaded_socket_queue.size( ) >= threaded_socket_max_queue )
+		if( !threaded_socket_enabled || IsPacketQueueFull( ) )
 		// testing for maximum queue size, this is a very cheap "fix"
 		// the socket itself has a queue too but will start dropping packets when full
 		{
@@ -632,7 +677,8 @@ static uint32_t PacketReceiverThread( void * )
 			continue;
 
 		p.buffer.assign( tempbuf, tempbuf + len );
-		threaded_socket_queue.push( p );
+
+		PushPacketToQueue( p );
 	}
 
 	return 0;
@@ -776,24 +822,34 @@ LUA_FUNCTION_STATIC( EnablePacketSampling )
 {
 	LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 
-	AUTO_LOCK( packet_sampling_mutex );
-
 	packet_sampling_enabled = LUA->GetBool( 1 );
 	if( !packet_sampling_enabled )
+	{
+		AUTO_LOCK( packet_sampling_mutex );
 		packet_sampling_queue.clear( );
+	}
 
 	return 0;
 }
 
-LUA_FUNCTION_STATIC( GetSamplePacket )
+inline packet_t GetSamplePacket( )
 {
 	AUTO_LOCK( packet_sampling_mutex );
 
 	if( packet_sampling_queue.empty( ) )
-		return 0;
+		return packet_t( );
 
 	packet_t p = packet_sampling_queue.front( );
 	packet_sampling_queue.pop_front( );
+	return p;
+}
+
+LUA_FUNCTION_STATIC( GetSamplePacket )
+{
+	packet_t p = GetSamplePacket( );
+	if( p.address.sin_addr.s_addr == 0 )
+		return 0;
+
 	LUA->PushNumber( p.address.sin_addr.s_addr );
 	LUA->PushNumber( p.address.sin_port );
 	LUA->PushString( &p.buffer[0], p.buffer.size( ) );
