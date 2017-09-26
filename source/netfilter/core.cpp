@@ -70,9 +70,10 @@ namespace netfilter
 	class AtomicBool
 	{
 	public:
-		AtomicBool( bool v ) :
-			value( v )
-		{ }
+		AtomicBool( bool v )
+		{
+			__sync_bool_compare_and_swap( &value, !v, v );
+		}
 
 		operator bool( ) const
 		{
@@ -244,8 +245,8 @@ static bool firewall_blacklist_enabled = false;
 static set_uint32 firewall_blacklist;
 
 static const size_t threaded_socket_max_queue = 1000;
-static AtomicBool threaded_socket_enabled = false;
-static AtomicBool threaded_socket_execute = true;
+static AtomicBool threaded_socket_enabled( false );
+static AtomicBool threaded_socket_execute( true );
 static ThreadHandle_t threaded_socket_handle = nullptr;
 static std::queue<packet_t> threaded_socket_queue;
 static CThreadFastMutex threaded_socket_mutex;
@@ -262,7 +263,7 @@ static uint32_t info_cache_time = 5;
 static ClientManager client_manager;
 
 static const size_t packet_sampling_max_queue = 50;
-static AtomicBool packet_sampling_enabled = false;
+static AtomicBool packet_sampling_enabled( false );
 static std::deque<packet_t> packet_sampling_queue;
 static CThreadFastMutex packet_sampling_mutex;
 
