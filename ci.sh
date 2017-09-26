@@ -53,5 +53,5 @@ cd "$REPOSITORY_DIR/projects/$PROJECT_OS/gmake"
 
 make
 
-cp "$REPOSITORY_DIR/projects/$PROJECT_OS/gmake/release/gmsv_serversecure_$TARGET_OS.dll" "$REPOSITORY_DIR"
+cp "$REPOSITORY_DIR/projects/$PROJECT_OS/gmake/release/"gm{sv,cl}_${MODULE_NAME}_$TARGET_OS.dll "$REPOSITORY_DIR"
 cd "$REPOSITORY_DIR"

@@ -19,7 +19,7 @@ addons:
       - g++-4.9
       - g++-4.9-multilib
 install:
-  - export MODULE_NAME="serversecure"
+  - export MODULE_NAME="serversecure.core"
   - export DEPENDENCIES="$TRAVIS_BUILD_DIR/dependencies"
   - export GARRYSMOD_COMMON="$DEPENDENCIES/garrysmod_common"
   - export SOURCE_SDK="$DEPENDENCIES/sourcesdk-minimal"
