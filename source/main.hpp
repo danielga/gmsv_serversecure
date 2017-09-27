@@ -13,8 +13,8 @@
 
 #else
 
-#define DebugMsg( arg, ... ) (void)arg
-#define DebugWarning( arg, ... ) (void)arg
+#define DebugMsg( arg, ... ) (void)( arg, __VA_ARGS__ )
+#define DebugWarning( arg, ... ) (void)( arg, __VA_ARGS__ )
 
 #endif
 
@@ -22,14 +22,13 @@ class IServer;
 
 namespace global
 {
-
-extern SourceSDK::FactoryLoader engine_loader;
-extern std::string engine_binary;
-extern IServer *server;
+	extern SourceSDK::FactoryLoader engine_loader;
+	extern std::string engine_binary;
+	extern IServer *server;
 
 #if defined DEBUG
 
-static Color __yellow( 255, 255, 0, 255 );
+	static Color __yellow( 255, 255, 0, 255 );
 
 #endif
 

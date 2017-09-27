@@ -12,8 +12,6 @@ namespace GarrysMod
 
 namespace netfilter
 {
-
-void Initialize( GarrysMod::Lua::ILuaBase *LUA );
-void Deinitialize( GarrysMod::Lua::ILuaBase *LUA );
-
+	void Initialize( GarrysMod::Lua::ILuaBase *LUA );
+	void Deinitialize( GarrysMod::Lua::ILuaBase *LUA );
 }
