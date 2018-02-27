@@ -26,7 +26,7 @@ namespace filecheck
 #if defined SYSTEM_WINDOWS
 
 	static const char CNetChan__IsValidFileForTransfer_sig[] =
-		"\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x80\x3B";
+		"\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x8A\x03";
 	static const size_t CNetChan__IsValidFileForTransfer_siglen =
 		sizeof( CNetChan__IsValidFileForTransfer_sig ) - 1;
 
