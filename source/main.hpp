@@ -13,8 +13,8 @@
 
 #else
 
-#define DebugMsg( arg, ... ) (void)( arg, __VA_ARGS__ )
-#define DebugWarning( arg, ... ) (void)( arg, __VA_ARGS__ )
+#define DebugMsg( ... )
+#define DebugWarning( ... )
 
 #endif
 
