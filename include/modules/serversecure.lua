@@ -2,6 +2,9 @@ require("serversecure.core")
 
 local format, match, band, rshift = string.format, string.match, bit.band, bit.rshift
 
+serversecure.Version = "serversecure 1.5.19"
+serversecure.VersionNum = 10519
+
 function serversecure.IPToString(uint)
 	if not uint then
 		return
@@ -32,3 +35,7 @@ function serversecure.PostInitialize()
 	print("[ServerSecure] serversecure.PostInitialize is deprecated since it's not needed anymore!")
 	return true
 end
+
+hook.Add("Initialize", "serversecure.FixGameDescription", function()
+	serversecure.RefreshInfoCache()
+end)
