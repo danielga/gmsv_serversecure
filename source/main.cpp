@@ -15,14 +15,9 @@ namespace global
 		"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
 	static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
 
-#elif defined SYSTEM_LINUX
+#elif defined SYSTEM_LINUX || defined SYSTEM_MACOSX
 
 	static const char IServer_sig[] = "@sv";
-	static const size_t IServer_siglen = 0;
-
-#elif defined SYSTEM_MACOSX
-
-	static const char IServer_sig[] = "@_sv";
 	static const size_t IServer_siglen = 0;
 
 #endif
