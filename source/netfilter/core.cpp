@@ -181,7 +181,7 @@ namespace netfilter
 
 	static const char operating_system_char = 'w';
 
-#elif defined SYSTEM_LINUX
+#elif defined SYSTEM_LINUX || defined SYSTEM_MACOSX
 
 	static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
 	static const size_t SteamGameServerAPIContext_symlen = 0;
@@ -195,27 +195,11 @@ namespace netfilter
 	static const char net_sockets_sig[] = "@_ZL11net_sockets";
 	static const size_t net_sockets_siglen = 0;
 
+#ifdef SYSTEM_LINUX
 	static const char operating_system_char = 'l';
-
-	typedef int SOCKET;
-
-	static const SOCKET INVALID_SOCKET = -1;
-
-#elif defined SYSTEM_MACOSX
-
-	static const char SteamGameServerAPIContext_sym[] = "@__ZL27s_SteamGameServerAPIContext";
-	static const size_t SteamGameServerAPIContext_symlen = 0;
-
-	static const char FileSystemFactory_sym[] = "@__Z17FileSystemFactoryPKcPi";
-	static const size_t FileSystemFactory_symlen = 0;
-
-	static const char g_pFullFileSystem_sym[] = "@_g_pFullFileSystem";
-	static const size_t g_pFullFileSystem_symlen = 0;
-
-	static const char net_sockets_sig[] = "@__ZL11net_sockets";
-	static const size_t net_sockets_siglen = 0;
-
+#else
 	static const char operating_system_char = 'm';
+#endif
 
 	typedef int SOCKET;
 

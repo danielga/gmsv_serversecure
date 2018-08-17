@@ -1,7 +1,7 @@
 #include <filecheck.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <GarrysMod/LuaHelpers.hpp>
+#include <GarrysMod/Lua/Helpers.hpp>
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
@@ -26,20 +26,14 @@ namespace filecheck
 #if defined SYSTEM_WINDOWS
 
 	static const char CNetChan__IsValidFileForTransfer_sig[] =
-		"\x55\x8B\xEC\x53\x8B\x5D\x08\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x8A\x03";
+		"\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x85\xDB\x0F\x84";
 	static const size_t CNetChan__IsValidFileForTransfer_siglen =
 		sizeof( CNetChan__IsValidFileForTransfer_sig ) - 1;
 
-#elif defined SYSTEM_LINUX
+#elif defined SYSTEM_LINUX || defined SYSTEM_MACOSX
 
 	static const char CNetChan__IsValidFileForTransfer_sig[] =
 		"@_ZN8CNetChan22IsValidFileForTransferEPKc";
-	static const size_t CNetChan__IsValidFileForTransfer_siglen = 0;
-
-#elif defined SYSTEM_MACOSX
-
-	static const char CNetChan__IsValidFileForTransfer_sig[] =
-		"@__ZN8CNetChan22IsValidFileForTransferEPKc";
 	static const size_t CNetChan__IsValidFileForTransfer_siglen = 0;
 
 #endif
