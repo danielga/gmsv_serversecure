@@ -5,7 +5,7 @@ clone_depth: 1
 init:
 - cmd: git config --global core.autocrlf true
 environment:
-  MODULE_NAME: serversecure
+  MODULE_NAME: serversecure.core
   REPOSITORY_DIR: $(APPVEYOR_BUILD_FOLDER)
   DEPENDENCIES: $(APPVEYOR_BUILD_FOLDER)/dependencies
   GARRYSMOD_COMMON: $(APPVEYOR_BUILD_FOLDER)/dependencies/garrysmod_common
