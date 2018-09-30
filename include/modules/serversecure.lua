@@ -2,8 +2,8 @@ require("serversecure.core")
 
 local format, match, band, rshift = string.format, string.match, bit.band, bit.rshift
 
-serversecure.Version = "serversecure 1.5.21"
-serversecure.VersionNum = 10521
+serversecure.Version = "serversecure 1.5.22"
+serversecure.VersionNum = 10522
 
 function serversecure.IPToString(uint)
 	if not uint then

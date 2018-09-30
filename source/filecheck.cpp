@@ -30,7 +30,7 @@ namespace filecheck
 	static const size_t CNetChan__IsValidFileForTransfer_siglen =
 		sizeof( CNetChan__IsValidFileForTransfer_sig ) - 1;
 
-#elif defined SYSTEM_LINUX || defined SYSTEM_MACOSX
+#elif defined SYSTEM_POSIX
 
 	static const char CNetChan__IsValidFileForTransfer_sig[] =
 		"@_ZN8CNetChan22IsValidFileForTransferEPKc";

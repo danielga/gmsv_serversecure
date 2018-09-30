@@ -181,7 +181,7 @@ namespace netfilter
 
 	static const char operating_system_char = 'w';
 
-#elif defined SYSTEM_LINUX || defined SYSTEM_MACOSX
+#elif defined SYSTEM_POSIX
 
 	static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
 	static const size_t SteamGameServerAPIContext_symlen = 0;
@@ -195,9 +195,9 @@ namespace netfilter
 	static const char net_sockets_sig[] = "@_ZL11net_sockets";
 	static const size_t net_sockets_siglen = 0;
 
-#ifdef SYSTEM_LINUX
+#if defined SYSTEM_LINUX
 	static const char operating_system_char = 'l';
-#else
+#elif defined SYSTEM_MACOSX
 	static const char operating_system_char = 'm';
 #endif
 
@@ -902,7 +902,14 @@ namespace netfilter
 					reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
 						dedicated_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
 					) );
-				filesystem = filesystem_ptr != nullptr ? *filesystem_ptr : nullptr;
+				if( filesystem_ptr == nullptr )
+					filesystem_ptr =
+						reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
+							server_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+						) );
+
+				if( filesystem_ptr != nullptr )
+					filesystem = *filesystem_ptr;
 			}
 			else
 			{
