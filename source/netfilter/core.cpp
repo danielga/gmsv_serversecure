@@ -2,7 +2,8 @@
 #include <netfilter/clientmanager.hpp>
 #include <main.hpp>
 #include <GarrysMod/Lua/Interface.h>
-#include <GarrysMod/Interfaces.hpp>
+#include <GarrysMod/FactoryLoader.hpp>
+#include <detouring/hook.hpp>
 #include <stdint.h>
 #include <stddef.h>
 #include <queue>
@@ -27,6 +28,10 @@
 #include <unordered_set>
 #include <atomic>
 
+typedef int32_t ssize_t;
+typedef int32_t socklen_t;
+typedef int32_t recvlen_t;
+
 #elif defined SYSTEM_LINUX
 
 #include <sys/types.h>
@@ -36,6 +41,11 @@
 #include <errno.h>
 #include <unordered_set>
 #include <atomic>
+
+typedef int32_t SOCKET;
+typedef int32_t recvlen_t;
+
+static const SOCKET INVALID_SOCKET = -1;
 
 #elif defined SYSTEM_MACOSX
 
@@ -55,6 +65,11 @@
 #include <atomic>
 
 #endif
+
+typedef int32_t SOCKET;
+typedef int32_t recvlen_t;
+
+static const SOCKET INVALID_SOCKET = -1;
 
 #endif
 
@@ -99,15 +114,6 @@ namespace netfilter
 
 #endif
 
-	typedef int32_t( *Hook_recvfrom_t )(
-		int32_t s,
-		char *buf,
-		int32_t buflen,
-		int32_t flags,
-		sockaddr *from,
-		int32_t *fromlen
-		);
-
 	struct packet_t
 	{
 		packet_t( ) :
@@ -116,8 +122,8 @@ namespace netfilter
 		{ }
 
 		sockaddr_in address;
-		int32_t address_size;
-		std::vector<char> buffer;
+		socklen_t address_size;
+		std::vector<uint8_t> buffer;
 	};
 
 	struct netsocket_t
@@ -133,8 +139,8 @@ namespace netfilter
 		std::string game_dir;
 		std::string game_version;
 		std::string game_desc;
-		int32_t max_clients;
-		int32_t udp_port;
+		int32_t max_clients = 0;
+		int32_t udp_port = 0;
 		std::string tags;
 	};
 
@@ -201,24 +207,26 @@ namespace netfilter
 	static const char operating_system_char = 'm';
 #endif
 
-	typedef int SOCKET;
-
-	static const SOCKET INVALID_SOCKET = -1;
-
 #endif
 
-	static std::string server_binary =
-		Helpers::GetBinaryFileName( "server", false, true, "garrysmod/bin/" );
 	static CSteamGameServerAPIContext *gameserver_context = nullptr;
 
-	static SourceSDK::FactoryLoader icvar_loader( "vstdlib", true, IS_SERVERSIDE, "bin/" );
+	static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
 	static ConVar *sv_visiblemaxplayers = nullptr;
 
-	static std::string dedicated_binary =
-		Helpers::GetBinaryFileName( "dedicated", false, true, "bin/" );
-	static SourceSDK::FactoryLoader server_loader( "server", false, true, "garrysmod/bin/" );
+	static SourceSDK::ModuleLoader dedicated_loader( "dedicated" );
+	static SourceSDK::FactoryLoader server_loader( "server" );
 
-	static Hook_recvfrom_t Hook_recvfrom = VCRHook_recvfrom;
+	static ssize_t recvfrom_detour(
+		SOCKET s,
+		void *buf,
+		recvlen_t buflen,
+		int32_t flags,
+		sockaddr *from,
+		socklen_t *fromlen
+	);
+	typedef decltype( recvfrom_detour ) *recvfrom_t;
+	static Detouring::Hook recvfrom_hook( "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
 	static SOCKET game_socket = INVALID_SOCKET;
 
 	static bool packet_validation_enabled = false;
@@ -263,7 +271,7 @@ namespace netfilter
 
 		{
 			reply_info.game_dir.resize( 256 );
-			engine_server->GetGameDir( &reply_info.game_dir[0], reply_info.game_dir.size( ) );
+			engine_server->GetGameDir( &reply_info.game_dir[0], static_cast<int32_t>( reply_info.game_dir.size( ) ) );
 			reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
 
 			size_t pos = reply_info.game_dir.find_last_of( "\\/" );
@@ -411,7 +419,7 @@ namespace netfilter
 		return str;
 	}
 
-	static PacketType ClassifyPacket( const char *data, int32_t len, const sockaddr_in &from )
+	static PacketType ClassifyPacket( const uint8_t *data, int32_t len, const sockaddr_in &from )
 	{
 		if( len == 0 )
 		{
@@ -441,7 +449,7 @@ namespace netfilter
 		if( channel != -1 )
 			return PacketTypeGood;
 
-		uint8_t type = *reinterpret_cast<const uint8_t *>( data + 4 );
+		uint8_t type = *( data + 4 );
 		if( packet_validation_enabled )
 		{
 			switch( type )
@@ -460,7 +468,7 @@ namespace netfilter
 					return PacketTypeInvalid;
 				}
 
-				if( len >= 18 && strncmp( data + 5, "statusResponse", 14 ) == 0 )
+				if( len >= 18 && strncmp( reinterpret_cast<const char *>( data + 5 ), "statusResponse", 14 ) == 0 )
 				{
 					DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
@@ -475,7 +483,7 @@ namespace netfilter
 				return PacketTypeGood;
 
 			case 'T': // server info request
-				return len == 25 && strncmp( data + 5, "Source Engine Query", 19 ) == 0 ?
+				return len == 25 && strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) == 0 ?
 					PacketTypeInfo : PacketTypeInvalid;
 
 			case 'U': // player info request
@@ -545,26 +553,27 @@ namespace netfilter
 		return p;
 	}
 
-	static int32_t ReceiveAndAnalyzePacket(
-		int32_t s,
-		char *buf,
-		int32_t buflen,
+	static ssize_t ReceiveAndAnalyzePacket(
+		SOCKET s,
+		void *buf,
+		recvlen_t buflen,
 		int32_t flags,
 		sockaddr *from,
-		int32_t *fromlen
+		socklen_t *fromlen
 	)
 	{
 		sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
-		int32_t len = Hook_recvfrom( s, buf, buflen, flags, from, fromlen );
+		ssize_t len = recvfrom_hook.GetTrampoline<recvfrom_t>( )( s, buf, buflen, flags, from, fromlen );
 		if( len == -1 )
 			return -1;
 
+		const uint8_t *buffer = reinterpret_cast<uint8_t *>( buf );
 		if( packet_sampling_enabled )
 		{
 			packet_t p;
 			memcpy( &p.address, from, *fromlen );
 			p.address_size = *fromlen;
-			p.buffer.assign( buf, buf + len );
+			p.buffer.assign( buffer, buffer + len );
 
 			AUTO_LOCK( packet_sampling_mutex );
 
@@ -579,7 +588,7 @@ namespace netfilter
 		if( !IsAddressAllowed( infrom ) )
 			return -1;
 
-		PacketType type = ClassifyPacket( buf, len, infrom );
+		PacketType type = ClassifyPacket( buffer, len, infrom );
 		if( type == PacketTypeInfo )
 			type = HandleInfoQuery( infrom );
 
@@ -595,15 +604,18 @@ namespace netfilter
 		return threaded_socket_queue.empty( );
 	}
 
-	static int32_t Hook_recvfrom_detour(
-		int32_t s,
-		char *buf,
-		int32_t buflen,
+	static ssize_t recvfrom_detour(
+		SOCKET s,
+		void *buf,
+		recvlen_t buflen,
 		int32_t flags,
 		sockaddr *from,
-		int32_t *fromlen
+		socklen_t *fromlen
 	)
 	{
+		if( s != game_socket )
+			return recvfrom_hook.GetTrampoline<recvfrom_t>( )( s, buf, buflen, flags, from, fromlen );
+		
 		bool queue_empty = IsPacketQueueEmpty( );
 		if( !threaded_socket_enabled && queue_empty )
 			return HandleNetError(
@@ -641,7 +653,7 @@ namespace netfilter
 		threaded_socket_queue.push( p );
 	}
 
-	static uint32_t PacketReceiverThread( void * )
+	static uintp PacketReceiverThread( void * )
 	{
 		timeval ms100 = { 0, 100000 };
 		char tempbuf[65535] = { 0 };
@@ -665,7 +677,7 @@ namespace netfilter
 				continue;
 
 			packet_t p;
-			int32_t len = ReceiveAndAnalyzePacket(
+			ssize_t len = ReceiveAndAnalyzePacket(
 				game_socket,
 				tempbuf,
 				sizeof( tempbuf ),
@@ -687,12 +699,12 @@ namespace netfilter
 	inline void SetReceiveDetourStatus( bool enabled )
 	{
 		if( enabled )
-			VCRHook_recvfrom = Hook_recvfrom_detour;
+			recvfrom_hook.Enable( );
 		else if( !firewall_whitelist_enabled &&
 			!firewall_blacklist_enabled &&
 			!packet_validation_enabled &&
 			!threaded_socket_enabled )
-			VCRHook_recvfrom = Hook_recvfrom;
+			recvfrom_hook.Disable( );
 	}
 
 	LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
@@ -854,7 +866,7 @@ namespace netfilter
 
 		LUA->PushNumber( p.address.sin_addr.s_addr );
 		LUA->PushNumber( p.address.sin_port );
-		LUA->PushString( &p.buffer[0], p.buffer.size( ) );
+		LUA->PushString( reinterpret_cast<const char *>( &p.buffer[0] ), p.buffer.size( ) );
 		return 3;
 	}
 
@@ -893,19 +905,25 @@ namespace netfilter
 			SymbolFinder symfinder;
 
 			CreateInterfaceFn factory =
-				reinterpret_cast<CreateInterfaceFn>( symfinder.ResolveOnBinary(
-					dedicated_binary.c_str( ), FileSystemFactory_sym, FileSystemFactory_symlen
+				reinterpret_cast<CreateInterfaceFn>( symfinder.Resolve(
+					dedicated_loader.GetModule( ),
+					FileSystemFactory_sym,
+					FileSystemFactory_symlen
 				) );
 			if( factory == nullptr )
 			{
 				IFileSystem **filesystem_ptr =
-					reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
-						dedicated_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+					reinterpret_cast<IFileSystem **>( symfinder.Resolve(
+						dedicated_loader.GetModule( ),
+						g_pFullFileSystem_sym, 
+						g_pFullFileSystem_symlen
 					) );
 				if( filesystem_ptr == nullptr )
 					filesystem_ptr =
-						reinterpret_cast<IFileSystem **>( symfinder.ResolveOnBinary(
-							server_binary.c_str( ), g_pFullFileSystem_sym, g_pFullFileSystem_symlen
+						reinterpret_cast<IFileSystem **>( symfinder.Resolve(
+							server_loader.GetModuleLoader( ).GetModule( ),
+							g_pFullFileSystem_sym,
+							g_pFullFileSystem_symlen
 						) );
 
 				if( filesystem_ptr != nullptr )
@@ -917,29 +935,31 @@ namespace netfilter
 					static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
 			}
 
-			net_sockets =
+			void *temp_net_sockets = symfinder.Resolve(
+				global::engine_loader.GetModuleLoader( ).GetModule( ),
+				net_sockets_sig,
+				net_sockets_siglen
+			);
+			if( temp_net_sockets != nullptr )
+				net_sockets =
 
 #if defined SYSTEM_POSIX
 
-				reinterpret_cast<netsockets_t *>
+					reinterpret_cast<netsockets_t *>
 
 #else
 
-				*reinterpret_cast<netsockets_t **>
+					*reinterpret_cast<netsockets_t **>
 
 #endif
 
-				( symfinder.ResolveOnBinary(
-					global::engine_binary.c_str( ),
-					net_sockets_sig,
-					net_sockets_siglen
-				) );
+					( temp_net_sockets );
 
 #if defined SYSTEM_WINDOWS
 
 			CSteamGameServerAPIContext **gameserver_context_pointer =
-				reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.ResolveOnBinary(
-					server_binary.c_str( ),
+				reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.Resolve(
+					server_loader.GetModuleLoader( ).GetModule( ),
 					SteamGameServerAPIContext_sym,
 					SteamGameServerAPIContext_symlen
 				) );
@@ -953,8 +973,8 @@ namespace netfilter
 #else
 
 			gameserver_context =
-				reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.ResolveOnBinary(
-					server_binary.c_str( ),
+				reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
+					server_loader.GetModuleLoader( ).GetModule( ),
 					SteamGameServerAPIContext_sym,
 					SteamGameServerAPIContext_symlen
 				) );
@@ -1050,6 +1070,6 @@ namespace netfilter
 			threaded_socket_handle = nullptr;
 		}
 
-		VCRHook_recvfrom = Hook_recvfrom;
+		recvfrom_hook.Destroy( );
 	}
 }

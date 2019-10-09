@@ -22,8 +22,7 @@ namespace global
 
 #endif
 
-	SourceSDK::FactoryLoader engine_loader( "engine", false, true, "bin/" );
-	std::string engine_binary = Helpers::GetBinaryFileName( "engine", false, true, "bin/" );
+	SourceSDK::FactoryLoader engine_loader( "engine" );
 	IServer *server = nullptr;
 
 	LUA_FUNCTION_STATIC( GetClientCount )
@@ -37,6 +36,14 @@ namespace global
 		{
 			SymbolFinder symfinder;
 
+			void *temp_server = symfinder.Resolve(
+				engine_loader.GetModuleLoader( ).GetModule( ),
+				IServer_sig,
+				IServer_siglen
+			);
+			if( temp_server == nullptr )
+				LUA->ThrowError( "failed to locate IServer" );
+
 			server =
 
 #if defined SYSTEM_POSIX
@@ -49,23 +56,19 @@ namespace global
 
 #endif
 
-				( symfinder.ResolveOnBinary(
-					engine_binary.c_str( ),
-					IServer_sig,
-					IServer_siglen
-				) );
+				( temp_server );
 		}
 
 		if( server == nullptr )
-			LUA->ThrowError( "failed to locate IServer" );
+			LUA->ThrowError( "failed to dereference IServer" );
 
 		LUA->CreateTable( );
 
-		LUA->PushString( "serversecure 1.5.24" );
+		LUA->PushString( "serversecure 1.5.25" );
 		LUA->SetField( -2, "Version" );
 
 		// version num follows LuaJIT style, xxyyzz
-		LUA->PushNumber( 10524 );
+		LUA->PushNumber( 10525 );
 		LUA->SetField( -2, "VersionNum" );
 
 		LUA->PushCFunction( GetClientCount );
