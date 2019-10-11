@@ -54,17 +54,8 @@ static const SOCKET INVALID_SOCKET = -1;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
-
-#ifdef SYSTEM_MACOSX_BAD
-
-#include <set>
-
-#else
-
 #include <unordered_set>
 #include <atomic>
-
-#endif
 
 typedef int32_t SOCKET;
 typedef int32_t recvlen_t;
@@ -77,43 +68,6 @@ class CBaseServer;
 
 namespace netfilter
 {
-
-#ifdef SYSTEM_MACOSX_BAD
-
-	typedef std::set<uint32_t> set_uint32;
-
-	// Pray to the gods for guidance and hope this is enough.
-	class AtomicBool
-	{
-	public:
-		AtomicBool( bool v )
-		{
-			__sync_bool_compare_and_swap( &value, !v, v );
-		}
-
-		operator bool( ) const
-		{
-			return __sync_fetch_and_or( &value, 0 );
-		}
-
-		AtomicBool &operator =( bool v )
-		{
-			__sync_bool_compare_and_swap( &value, !v, v );
-			return *this;
-		}
-
-	private:
-		bool value;
-	};
-
-#else
-
-	typedef std::unordered_set<uint32_t> set_uint32;
-
-	typedef std::atomic_bool AtomicBool;
-
-#endif
-
 	struct packet_t
 	{
 		packet_t( ) :
@@ -232,14 +186,14 @@ namespace netfilter
 	static bool packet_validation_enabled = false;
 
 	static bool firewall_whitelist_enabled = false;
-	static set_uint32 firewall_whitelist;
+	static std::unordered_set<uint32_t> firewall_whitelist;
 
 	static bool firewall_blacklist_enabled = false;
-	static set_uint32 firewall_blacklist;
+	static std::unordered_set<uint32_t> firewall_blacklist;
 
 	static const size_t threaded_socket_max_queue = 1000;
-	static AtomicBool threaded_socket_enabled( false );
-	static AtomicBool threaded_socket_execute( true );
+	static std::atomic_bool threaded_socket_enabled( false );
+	static std::atomic_bool threaded_socket_execute( true );
 	static ThreadHandle_t threaded_socket_handle = nullptr;
 	static std::queue<packet_t> threaded_socket_queue;
 	static CThreadFastMutex threaded_socket_mutex;
@@ -256,7 +210,7 @@ namespace netfilter
 	static ClientManager client_manager;
 
 	static const size_t packet_sampling_max_queue = 50;
-	static AtomicBool packet_sampling_enabled( false );
+	static std::atomic_bool packet_sampling_enabled( false );
 	static std::deque<packet_t> packet_sampling_queue;
 	static CThreadFastMutex packet_sampling_mutex;
 
@@ -732,7 +686,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( ResetWhitelist )
 	{
-		set_uint32( ).swap( firewall_whitelist );
+		std::unordered_set<uint32_t>( ).swap( firewall_whitelist );
 		return 0;
 	}
 
@@ -761,7 +715,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( ResetBlacklist )
 	{
-		set_uint32( ).swap( firewall_blacklist );
+		std::unordered_set<uint32_t>( ).swap( firewall_blacklist );
 		return 0;
 	}
 
