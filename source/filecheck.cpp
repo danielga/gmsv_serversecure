@@ -158,8 +158,8 @@ namespace filecheck
 			SymbolFinder symfinder;
 
 			CNetChan__IsValidFileForTransfer_original =
-				reinterpret_cast<CNetChan__IsValidFileForTransfer_t>( symfinder.ResolveOnBinary(
-					global::engine_binary.c_str( ),
+				reinterpret_cast<CNetChan__IsValidFileForTransfer_t>( symfinder.Resolve(
+					global::engine_loader.GetModuleLoader( ).GetModule( ),
 					CNetChan__IsValidFileForTransfer_sig,
 					CNetChan__IsValidFileForTransfer_siglen
 				) );

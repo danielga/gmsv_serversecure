@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <GarrysMod/Interfaces.hpp>
+#include <GarrysMod/FactoryLoader.hpp>
 
 #if defined DEBUG
 
@@ -23,7 +23,6 @@ class IServer;
 namespace global
 {
 	extern SourceSDK::FactoryLoader engine_loader;
-	extern std::string engine_binary;
 	extern IServer *server;
 
 #if defined DEBUG
