@@ -8,27 +8,34 @@ env:
       REPOSITORY_DIR="$TRAVIS_BUILD_DIR"
       DEPENDENCIES="$TRAVIS_BUILD_DIR/dependencies"
       GARRYSMOD_COMMON="$TRAVIS_BUILD_DIR/dependencies/garrysmod_common"
-      SOURCE_SDK="$TRAVIS_BUILD_DIR/dependencies/sourcesdk-minimal"
-      TARGET_OS="$TRAVIS_OS_NAME"
-      COMPILER_PLATFORM=gmake
-      BUILD_SCRIPT="$TRAVIS_BUILD_DIR/dependencies/garrysmod_common/build/ci.sh"
       GARRYSMOD_COMMON_REPOSITORY="https://github.com/danielga/garrysmod_common.git"
-      PREMAKE5_EXECUTABLE=premake5
+      GARRYSMOD_COMMON_BRANCH=master
+      SOURCE_SDK="$TRAVIS_BUILD_DIR/dependencies/sourcesdk-minimal"
+      SOURCE_SDK_REPOSITORY="https://github.com/danielga/sourcesdk-minimal.git"
+      SOURCE_SDK_BRANCH=master
+      BUILD_SCRIPT="$TRAVIS_BUILD_DIR/dependencies/garrysmod_common/build/build.sh"
+      BOOTSTRAP_URL="https://raw.githubusercontent.com/danielga/garrysmod_common/master/build/bootstrap.sh"
+      TARGET_OS="$TRAVIS_OS_NAME"
+      TARGET_OS_64="${TRAVIS_OS_NAME}64"
+      TARGET_ARCHITECTURE=x86
+      TARGET_ARCHITECTURE_64=x86_64
+      PROJECT_GENERATOR_VERSION=2
+      COMPILER_PLATFORM=gmake
+      DISABLE_X86_64_BUILD=true
 matrix:
   include:
     - os: linux
-      dist: trusty
+      dist: bionic
       compiler: gcc
       addons:
         apt:
-          sources:
-            - ubuntu-toolchain-r-test
           packages:
             - linux-libc-dev:i386
             - g++-8-multilib
       env:
         - PREMAKE5="$TRAVIS_BUILD_DIR/dependencies/linux/premake-core/premake5"
           PROJECT_OS=linux
+          PREMAKE5_URL="https://github.com/premake/premake-core/releases/download/v5.0.0-alpha14/premake-5.0.0-alpha14-linux.tar.gz"
       before_install:
         - export CC=gcc-8
           export CXX=g++-8
@@ -37,26 +44,15 @@ matrix:
       env:
         - PREMAKE5="$TRAVIS_BUILD_DIR/dependencies/macosx/premake-core/premake5"
           PROJECT_OS=macosx
-cache:
-  directories:
-    - "$TRAVIS_BUILD_DIR/dependencies"
-    - "$TRAVIS_BUILD_DIR/projects"
-install:
-  - mkdir -p "$DEPENDENCIES"
-  - if [ ! -f "$GARRYSMOD_COMMON/premake5.lua" ]; then
-      echo "garrysmod_common directory is empty, doing git clone of the remote repo";
-      git clone --recursive "$GARRYSMOD_COMMON_REPOSITORY" "$GARRYSMOD_COMMON";
-    else
-      echo "garrysmod_common directory is good, pulling any latest changes";
-      git -C "$GARRYSMOD_COMMON" pull;
-      git -C "$GARRYSMOD_COMMON" submodule update --init --recursive;
-    fi
+          PREMAKE5_URL="https://github.com/premake/premake-core/releases/download/v5.0.0-alpha14/premake-5.0.0-alpha14-macosx.tar.gz"
+install: "curl -s -L \"$BOOTSTRAP_URL\" | bash"
 script: "$BUILD_SCRIPT"
 deploy:
   provider: releases
   skip_cleanup: true
   file:
-    - "${TRAVIS_BUILD_DIR}/projects/${PROJECT_OS}/${COMPILER_PLATFORM}/release/gmsv_${MODULE_NAME}_${TARGET_OS}.dll"
+    - "${TRAVIS_BUILD_DIR}/projects/${PROJECT_OS}/${COMPILER_PLATFORM}/${TARGET_ARCHITECTURE}/Release/gmsv_${MODULE_NAME}_${TARGET_OS}.dll"
+    - "${TRAVIS_BUILD_DIR}/projects/${PROJECT_OS}/${COMPILER_PLATFORM}/${TARGET_ARCHITECTURE_64}/Release/gmsv_${MODULE_NAME}_${TARGET_OS_64}.dll"
   on:
     tags: true
   api_key:
