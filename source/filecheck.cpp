@@ -89,7 +89,7 @@ namespace filecheck
 		return hook.GetTrampoline<CNetChan__IsValidFileForTransfer_t>( )( filepath );
 	}
 
-	inline bool BlockDownload( const char *filepath )
+	inline bool BlockDownload( [[maybe_unused]] const char *filepath )
 	{
 		DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 		return false;
