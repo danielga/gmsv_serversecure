@@ -1,11 +1,12 @@
-#include <netfilter/core.hpp>
-#include <netfilter/clientmanager.hpp>
-#include <main.hpp>
+#include "core.hpp"
+#include "clientmanager.hpp"
+#include "main.hpp"
+
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/FactoryLoader.hpp>
 #include <detouring/hook.hpp>
-#include <stdint.h>
-#include <stddef.h>
+#include <cstdint>
+#include <cstddef>
 #include <queue>
 #include <string>
 #include <eiface.h>

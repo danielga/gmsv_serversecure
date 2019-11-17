@@ -1,9 +1,10 @@
-#include <filecheck.hpp>
-#include <main.hpp>
+#include "filecheck.hpp"
+#include "main.hpp"
+
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/Lua/Helpers.hpp>
-#include <stdint.h>
-#include <stddef.h>
+#include <cstdint>
+#include <cstddef>
 #include <string>
 #include <networkstringtabledefs.h>
 #include <cstring>
