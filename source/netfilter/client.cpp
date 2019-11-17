@@ -23,7 +23,7 @@ namespace netfilter
 			++count;
 			if( count / manager.GetMaxQueriesWindow( ) >= manager.GetMaxQueriesPerSecond( ) )
 			{
-				DebugWarning(
+				_DebugWarning(
 					"[ServerSecure] %d.%d.%d.% reached its query limit!\n",
 					( address >> 24 ) & 0xFF,
 					( address >> 16 ) & 0xFF,

@@ -261,7 +261,7 @@ namespace netfilter
 			if( file == nullptr )
 			{
 				reply_info.game_version = default_game_version;
-				DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
+				_DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
 				return;
 			}
 
@@ -271,7 +271,7 @@ namespace netfilter
 			if( failed )
 			{
 				reply_info.game_version = default_game_version;
-				DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
+				_DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
 				return;
 			}
 
@@ -382,7 +382,7 @@ namespace netfilter
 	{
 		if( len == 0 )
 		{
-			DebugWarning(
+			_DebugWarning(
 				"[ServerSecure] Bad OOB! len: %d from %s\n",
 				len,
 				IPToString( from.sin_addr )
@@ -396,7 +396,7 @@ namespace netfilter
 		int32_t channel = *reinterpret_cast<const int32_t *>( data );
 		if( channel == -2 )
 		{
-			DebugWarning(
+			_DebugWarning(
 				"[ServerSecure] Bad OOB! len: %d, channel: 0x%X from %s\n",
 				len,
 				channel,
@@ -417,7 +417,7 @@ namespace netfilter
 			case 's': // master server challenge
 				if( len > 100 )
 				{
-					DebugWarning(
+					_DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 						len,
 						channel,
@@ -429,7 +429,7 @@ namespace netfilter
 
 				if( len >= 18 && strncmp( reinterpret_cast<const char *>( data + 5 ), "statusResponse", 14 ) == 0 )
 				{
-					DebugWarning(
+					_DebugWarning(
 						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 						len,
 						channel,
@@ -451,7 +451,7 @@ namespace netfilter
 
 			case 'q': // connection handshake init
 			case 'k': // steam auth packet
-				DebugMsg(
+				_DebugMsg(
 					"[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 					len,
 					channel,
@@ -461,7 +461,7 @@ namespace netfilter
 				return PacketTypeGood;
 			}
 
-			DebugWarning(
+			_DebugWarning(
 				"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 				len,
 				channel,

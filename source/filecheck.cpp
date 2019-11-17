@@ -91,7 +91,7 @@ namespace filecheck
 
 	inline bool BlockDownload( [[maybe_unused]] const char *filepath )
 	{
-		DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
+		_DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 		return false;
 	}
 
@@ -133,7 +133,7 @@ namespace filecheck
 		nicefile.resize( std::strlen( nicefile.c_str( ) ) );
 		filepath = nicefile.c_str( );
 
-		DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
+		_DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
 
 		if( !Call( filepath ) )
 			return BlockDownload( filepath );
