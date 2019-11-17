@@ -6,6 +6,9 @@
 #include <scanning/symbolfinder.hpp>
 #include <iserver.h>
 #include <Platform.hpp>
+#include <icvar.h>
+
+ICvar *__x__ = g_pCVar;
 
 Symbol::Symbol( const std::string &nam, size_t len ) :
 	name( nam ), length( len ) { }
