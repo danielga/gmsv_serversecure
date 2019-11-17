@@ -20,6 +20,17 @@
 
 class IServer;
 
+struct Symbol
+{
+	std::string name;
+	size_t length;
+
+	Symbol( const std::string &nam, size_t len = 0 );
+
+	static Symbol FromSignature( const std::string &signature );
+	static Symbol FromName( const std::string &name );
+};
+
 namespace global
 {
 	extern SourceSDK::FactoryLoader engine_loader;

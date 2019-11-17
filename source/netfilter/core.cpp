@@ -121,39 +121,42 @@ namespace netfilter
 
 	typedef CUtlVector<netsocket_t> netsockets_t;
 
+	typedef netsocket_t *( *GetNetSocket_t )( int idx );
+
 #if defined SYSTEM_WINDOWS
 
-	static const char SteamGameServerAPIContext_sym[] =
-		"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3";
-	static const size_t SteamGameServerAPIContext_symlen =
-		sizeof( SteamGameServerAPIContext_sym ) - 1;
+	static const std::string CSteamGameServerAPIContext_sym =
+		"?s_SteamGameServerAPIContext@@3VCSteamGameServerAPIContext@@A";
+	static const Symbol SteamGameServerAPIContext_sym =
+		Symbol::FromSignature("\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3");
 
-	static const char FileSystemFactory_sym[] =
-		"\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8";
-	static const size_t FileSystemFactory_symlen = sizeof( FileSystemFactory_sym ) - 1;
+	static const std::vector<Symbol> FileSystemFactory_syms = {
+		Symbol::FromName( "?FileSystemFactory@@YAPAXPBDPAH@Z" ),
+		Symbol::FromSignature( "\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8" )
+	};
 
-	static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
-	static const size_t g_pFullFileSystem_symlen = 0;
+	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
 
-	static const char net_sockets_sig[] =
-		"\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10";
-	static size_t net_sockets_siglen = sizeof( net_sockets_sig ) - 1;
+	static const std::string GetNetSocket_sym = "?GMOD_GetNetSocket@@YAPAUnetsocket_t@@H@Z";
+	static const Symbol net_sockets_sym = Symbol::FromSignature(
+		"\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10" );
 
 	static const char operating_system_char = 'w';
 
 #elif defined SYSTEM_POSIX
 
-	static const char SteamGameServerAPIContext_sym[] = "@_ZL27s_SteamGameServerAPIContext";
-	static const size_t SteamGameServerAPIContext_symlen = 0;
+	static const std::string CSteamGameServerAPIContext_sym = "s_SteamGameServerAPIContext";
+	static const Symbol SteamGameServerAPIContext_sym =
+		Symbol::FromName( "_ZL27s_SteamGameServerAPIContext" );
 
-	static const char FileSystemFactory_sym[] = "@_Z17FileSystemFactoryPKcPi";
-	static const size_t FileSystemFactory_symlen = 0;
+	static const std::vector<Symbol> FileSystemFactory_syms = {
+		Symbol::FromName( "_Z17FileSystemFactoryPKcPi" )
+	};
 
-	static const char g_pFullFileSystem_sym[] = "@g_pFullFileSystem";
-	static const size_t g_pFullFileSystem_symlen = 0;
+	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
 
-	static const char net_sockets_sig[] = "@_ZL11net_sockets";
-	static const size_t net_sockets_siglen = 0;
+	static const std::string GetNetSocket_sym = "_Z17GMOD_GetNetSocketi";
+	static const Symbol net_sockets_sym = Symbol::FromName( "_ZL11net_sockets" );
 
 #if defined SYSTEM_LINUX
 	static const char operating_system_char = 'l';
@@ -180,7 +183,9 @@ namespace netfilter
 		socklen_t *fromlen
 	);
 	typedef decltype( recvfrom_detour ) *recvfrom_t;
+
 	static Detouring::Hook recvfrom_hook( "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
+
 	static SOCKET game_socket = INVALID_SOCKET;
 
 	static bool packet_validation_enabled = false;
@@ -853,31 +858,35 @@ namespace netfilter
 		if( globalvars == nullptr )
 			LUA->ThrowError( "failed to load required CGlobalVars interface" );
 
-		netsockets_t *net_sockets = nullptr;
-
 		{
 			SymbolFinder symfinder;
 
-			CreateInterfaceFn factory =
-				reinterpret_cast<CreateInterfaceFn>( symfinder.Resolve(
+			CreateInterfaceFn factory = nullptr;
+			for( const auto &symbol : FileSystemFactory_syms )
+			{
+				factory = reinterpret_cast<CreateInterfaceFn>( symfinder.Resolve(
 					dedicated_loader.GetModule( ),
-					FileSystemFactory_sym,
-					FileSystemFactory_symlen
+					symbol.name.c_str( ),
+					symbol.length
 				) );
+				if( factory != nullptr )
+					break;
+			}
+
 			if( factory == nullptr )
 			{
 				IFileSystem **filesystem_ptr =
 					reinterpret_cast<IFileSystem **>( symfinder.Resolve(
 						dedicated_loader.GetModule( ),
-						g_pFullFileSystem_sym, 
-						g_pFullFileSystem_symlen
+						g_pFullFileSystem_sym.name.c_str( ),
+						g_pFullFileSystem_sym.length
 					) );
 				if( filesystem_ptr == nullptr )
 					filesystem_ptr =
 						reinterpret_cast<IFileSystem **>( symfinder.Resolve(
-							server_loader.GetModuleLoader( ).GetModule( ),
-							g_pFullFileSystem_sym,
-							g_pFullFileSystem_symlen
+							server_loader.GetModule( ),
+							g_pFullFileSystem_sym.name.c_str( ),
+							g_pFullFileSystem_sym.length
 						) );
 
 				if( filesystem_ptr != nullptr )
@@ -889,63 +898,80 @@ namespace netfilter
 					static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
 			}
 
-			void *temp_net_sockets = symfinder.Resolve(
-				global::engine_loader.GetModuleLoader( ).GetModule( ),
-				net_sockets_sig,
-				net_sockets_siglen
+			auto GetNetSocket = reinterpret_cast<GetNetSocket_t>(
+				global::engine_loader.GetSymbol( GetNetSocket_sym )
 			);
-			if( temp_net_sockets != nullptr )
-				net_sockets =
+			if( GetNetSocket != nullptr )
+			{
+				netsocket_t *socket = GetNetSocket( 1 );
+				if( socket != nullptr )
+					game_socket = socket->hUDP;
+			}
+
+			if( game_socket == INVALID_SOCKET )
+			{
+				void *temp_net_sockets = reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
+					global::engine_loader.GetModule( ),
+					net_sockets_sym.name.c_str( ),
+					net_sockets_sym.length
+				) );
+				if( temp_net_sockets != nullptr )
+				{
+					netsockets_t *net_sockets =
 
 #if defined SYSTEM_POSIX
 
-					reinterpret_cast<netsockets_t *>
+						reinterpret_cast<netsockets_t *>
 
 #else
 
-					*reinterpret_cast<netsockets_t **>
+						*reinterpret_cast<netsockets_t **>
 
 #endif
 
-					( temp_net_sockets );
+						( temp_net_sockets );
+					if( net_sockets != nullptr )
+						game_socket = net_sockets->Element( 1 ).hUDP;
+				}
+			}
+
+			gameserver_context = reinterpret_cast<CSteamGameServerAPIContext *>(
+				server_loader.GetSymbol( CSteamGameServerAPIContext_sym )
+			);
+			if( gameserver_context == nullptr )
+			{
 
 #if defined SYSTEM_WINDOWS
 
-			CSteamGameServerAPIContext **gameserver_context_pointer =
-				reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.Resolve(
-					server_loader.GetModuleLoader( ).GetModule( ),
-					SteamGameServerAPIContext_sym,
-					SteamGameServerAPIContext_symlen
-				) );
-			if( gameserver_context_pointer == nullptr )
-				LUA->ThrowError(
-					"Failed to load required CSteamGameServerAPIContext interface pointer."
-				);
-
-			gameserver_context = *gameserver_context_pointer;
+				CSteamGameServerAPIContext **gameserver_context_pointer =
+					reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.Resolve(
+						server_loader.GetModule( ),
+						SteamGameServerAPIContext_sym.name.c_str(),
+						SteamGameServerAPIContext_sym.length
+					) );
+				if( gameserver_context_pointer != nullptr )
+					gameserver_context = *gameserver_context_pointer;
 
 #else
 
-			gameserver_context =
-				reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
-					server_loader.GetModuleLoader( ).GetModule( ),
-					SteamGameServerAPIContext_sym,
-					SteamGameServerAPIContext_symlen
-				) );
+					gameserver_context =
+						reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
+							server_loader.GetModule( ),
+							SteamGameServerAPIContext_sym.name.c_str(),
+							SteamGameServerAPIContext_sym.length
+						) );
 
 #endif
 
-			if( gameserver_context == nullptr )
-				LUA->ThrowError( "Failed to load required CSteamGameServerAPIContext interface." );
+			}
 		}
+
+		if( gameserver_context == nullptr )
+			LUA->ThrowError( "Failed to load required CSteamGameServerAPIContext interface." );
 
 		if( filesystem == nullptr )
 			LUA->ThrowError( "failed to initialize IFileSystem" );
 
-		if( net_sockets == nullptr )
-			LUA->ThrowError( "got an invalid pointer to net_sockets" );
-
-		game_socket = net_sockets->Element( 1 ).hUDP;
 		if( game_socket == INVALID_SOCKET )
 			LUA->ThrowError( "got an invalid server socket" );
 
