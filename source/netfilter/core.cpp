@@ -106,30 +106,11 @@ namespace netfilter
 		PacketTypeInfo
 	};
 
-	class CSteamGameServerAPIContext
-	{
-	public:
-		ISteamClient *m_pSteamClient;
-		ISteamGameServer *m_pSteamGameServer;
-		ISteamUtils *m_pSteamGameServerUtils;
-		ISteamNetworking *m_pSteamGameServerNetworking;
-		ISteamGameServerStats *m_pSteamGameServerStats;
-		ISteamHTTP *m_pSteamHTTP;
-		ISteamInventory *m_pSteamInventory;
-		ISteamUGC *m_pSteamUGC;
-		ISteamApps *m_pSteamApps;
-	};
-
 	typedef CUtlVector<netsocket_t> netsockets_t;
 
 	typedef netsocket_t *( *GetNetSocket_t )( int idx );
 
 #if defined SYSTEM_WINDOWS
-
-	static const std::string CSteamGameServerAPIContext_sym =
-		"?s_SteamGameServerAPIContext@@3VCSteamGameServerAPIContext@@A";
-	static const Symbol SteamGameServerAPIContext_sym =
-		Symbol::FromSignature("\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\xFF\x55\x08\x83\xC4\x08\xA3");
 
 	static const std::vector<Symbol> FileSystemFactory_syms = {
 		Symbol::FromName( "?FileSystemFactory@@YAPAXPBDPAH@Z" ),
@@ -140,19 +121,13 @@ namespace netfilter
 
 	static const std::string GetNetSocket_sym = "?GMOD_GetNetSocket@@YAPAUnetsocket_t@@H@Z";
 	static const Symbol net_sockets_sym = Symbol::FromSignature(
-		"\x2A\x2A\x2A\x2A\x80\x7E\x04\x00\x0F\x84\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\xC7\x45\xF8\x10" );
+		"\x2A\x2A\x2A\x2A\x56\x57\x8B\x7D\x08\x8B\xF7\x03\xF6\x8B\x44\xF3\x0C\x85\xC0\x74\x0A\x57\x50" );
 
 	static const char operating_system_char = 'w';
 
 #elif defined SYSTEM_POSIX
 
-	static const std::string CSteamGameServerAPIContext_sym = "s_SteamGameServerAPIContext";
-	static const Symbol SteamGameServerAPIContext_sym =
-		Symbol::FromName( "_ZL27s_SteamGameServerAPIContext" );
-
-	static const std::vector<Symbol> FileSystemFactory_syms = {
-		Symbol::FromName( "_Z17FileSystemFactoryPKcPi" )
-	};
+	static const std::vector<Symbol> FileSystemFactory_syms = { Symbol::FromName( "_Z17FileSystemFactoryPKcPi" ) };
 
 	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
 
@@ -167,7 +142,8 @@ namespace netfilter
 
 #endif
 
-	static CSteamGameServerAPIContext *gameserver_context = nullptr;
+	static CSteamGameServerAPIContext gameserver_context;
+	static bool gameserver_context_initialized = false;
 
 	static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
 	static ConVar *sv_visiblemaxplayers = nullptr;
@@ -204,7 +180,7 @@ namespace netfilter
 	static std::queue<packet_t> threaded_socket_queue;
 	static CThreadFastMutex threaded_socket_mutex;
 
-	static const char *default_game_version = "16.12.01";
+	static const char *default_game_version = "2019.11.12";
 	static const uint8_t default_proto_version = 17;
 	static bool info_cache_enabled = false;
 	static reply_info_t reply_info;
@@ -289,6 +265,14 @@ namespace netfilter
 	// updated on a much bigger period
 	static void BuildReplyInfo( )
 	{
+		// if vac protected, it activates itself some time after startup
+		if( !gameserver_context_initialized )
+			gameserver_context_initialized = gameserver_context.Init( );
+
+		ISteamGameServer *steamGS = nullptr;
+		if( gameserver_context_initialized )
+			steamGS = gameserver_context.SteamGameServer( );
+
 		info_cache_packet.Reset( );
 
 		info_cache_packet.WriteLong( -1 ); // connectionless packet header
@@ -312,10 +296,8 @@ namespace netfilter
 		info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 		info_cache_packet.WriteByte( operating_system_char );
 		info_cache_packet.WriteByte( global::server->GetPassword( ) != nullptr ? 1 : 0 );
-		// if vac protected, it activates itself some time after startup
-		ISteamGameServer *steamGS = gameserver_context != nullptr ?
-			gameserver_context->m_pSteamGameServer : nullptr;
-		info_cache_packet.WriteByte( steamGS != nullptr ? steamGS->BSecure( ) : false );
+		bool vacsecure = steamGS != nullptr ? steamGS->BSecure( ) : false;
+		info_cache_packet.WriteByte( vacsecure );
 		info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
 
 		const CSteamID *sid = engine_server->GetGameServerSteamID( );
@@ -884,11 +866,11 @@ namespace netfilter
 					) );
 				if( filesystem_ptr == nullptr )
 					filesystem_ptr =
-						reinterpret_cast<IFileSystem **>( symfinder.Resolve(
-							server_loader.GetModule( ),
-							g_pFullFileSystem_sym.name.c_str( ),
-							g_pFullFileSystem_sym.length
-						) );
+					reinterpret_cast<IFileSystem **>( symfinder.Resolve(
+						server_loader.GetModule( ),
+						g_pFullFileSystem_sym.name.c_str( ),
+						g_pFullFileSystem_sym.length
+					) );
 
 				if( filesystem_ptr != nullptr )
 					filesystem = *filesystem_ptr;
@@ -935,40 +917,7 @@ namespace netfilter
 						game_socket = net_sockets->Element( 1 ).hUDP;
 				}
 			}
-
-			gameserver_context = reinterpret_cast<CSteamGameServerAPIContext *>(
-				server_loader.GetSymbol( CSteamGameServerAPIContext_sym )
-			);
-			if( gameserver_context == nullptr )
-			{
-
-#if defined SYSTEM_WINDOWS
-
-				CSteamGameServerAPIContext **gameserver_context_pointer =
-					reinterpret_cast<CSteamGameServerAPIContext **>( symfinder.Resolve(
-						server_loader.GetModule( ),
-						SteamGameServerAPIContext_sym.name.c_str(),
-						SteamGameServerAPIContext_sym.length
-					) );
-				if( gameserver_context_pointer != nullptr )
-					gameserver_context = *gameserver_context_pointer;
-
-#else
-
-					gameserver_context =
-						reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
-							server_loader.GetModule( ),
-							SteamGameServerAPIContext_sym.name.c_str(),
-							SteamGameServerAPIContext_sym.length
-						) );
-
-#endif
-
-			}
 		}
-
-		if( gameserver_context == nullptr )
-			LUA->ThrowError( "Failed to load required CSteamGameServerAPIContext interface." );
 
 		if( filesystem == nullptr )
 			LUA->ThrowError( "failed to initialize IFileSystem" );
