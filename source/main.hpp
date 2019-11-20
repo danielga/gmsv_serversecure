@@ -1,24 +1,35 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <GarrysMod/FactoryLoader.hpp>
 
 #if defined DEBUG
 
 #include <dbg.h>
-#include <Color.h>
 
-#define DebugMsg( ... ) Msg( __VA_ARGS__ )
-#define DebugWarning( ... ) ConColorMsg( 1, global::__yellow, __VA_ARGS__ )
+#define _DebugMsg( ... ) Msg( __VA_ARGS__ )
+#define _DebugWarning( ... ) ConColorMsg( 1, global::__yellow, __VA_ARGS__ )
 
 #else
 
-#define DebugMsg( ... )
-#define DebugWarning( ... )
+#define _DebugMsg( ... )
+#define _DebugWarning( ... )
 
 #endif
 
 class IServer;
+
+struct Symbol
+{
+	std::string name;
+	size_t length;
+
+	Symbol( const std::string &nam, size_t len = 0 );
+
+	static Symbol FromSignature( const std::string &signature );
+	static Symbol FromName( const std::string &name );
+};
 
 namespace global
 {

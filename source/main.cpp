@@ -1,24 +1,36 @@
-#include <main.hpp>
-#include <netfilter/core.hpp>
-#include <filecheck.hpp>
+#include "main.hpp"
+#include "netfilter/core.hpp"
+#include "filecheck.hpp"
+
 #include <GarrysMod/Lua/Interface.h>
 #include <scanning/symbolfinder.hpp>
 #include <iserver.h>
 #include <Platform.hpp>
 
+Symbol::Symbol( const std::string &nam, size_t len ) :
+	name( nam ), length( len ) { }
+
+Symbol Symbol::FromSignature( const std::string &signature )
+{
+	return Symbol( signature, signature.size( ) );
+}
+
+Symbol Symbol::FromName( const std::string &name )
+{
+	return Symbol( "@" + name );
+}
+
 namespace global
 {
+	static const std::string CGameServer_sym = "sv";
 
 #if defined SYSTEM_WINDOWS
 
-	static const char IServer_sig[] =
-		"\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10";
-	static const size_t IServer_siglen = sizeof( IServer_sig ) - 1;
+	static const Symbol IServer_sym = Symbol::FromSignature( "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10" );
 
 #elif defined SYSTEM_POSIX
 
-	static const char IServer_sig[] = "@sv";
-	static const size_t IServer_siglen = 0;
+	static const Symbol IServer_sym = Symbol::FromName( "sv" );
 
 #endif
 
@@ -36,27 +48,33 @@ namespace global
 		{
 			SymbolFinder symfinder;
 
-			void *temp_server = symfinder.Resolve(
-				engine_loader.GetModuleLoader( ).GetModule( ),
-				IServer_sig,
-				IServer_siglen
+			server = reinterpret_cast<IServer *>(
+				engine_loader.GetSymbol( CGameServer_sym )
 			);
-			if( temp_server == nullptr )
-				LUA->ThrowError( "failed to locate IServer" );
+			if( server == nullptr )
+			{
+				void *temp_server = symfinder.Resolve(
+					engine_loader.GetModule( ),
+					IServer_sym.name.c_str( ),
+					IServer_sym.length
+				);
+				if( temp_server == nullptr )
+					LUA->ThrowError( "failed to locate IServer" );
 
-			server =
+				server =
 
 #if defined SYSTEM_POSIX
 
-				reinterpret_cast<IServer *>
+					reinterpret_cast<IServer *>
 
 #else
 
-				*reinterpret_cast<IServer **>
+					*reinterpret_cast<IServer **>
 
 #endif
 
-				( temp_server );
+					( temp_server );
+			}
 		}
 
 		if( server == nullptr )
@@ -64,11 +82,11 @@ namespace global
 
 		LUA->CreateTable( );
 
-		LUA->PushString( "serversecure 1.5.26" );
+		LUA->PushString( "serversecure 1.5.27" );
 		LUA->SetField( -2, "Version" );
 
 		// version num follows LuaJIT style, xxyyzz
-		LUA->PushNumber( 10526 );
+		LUA->PushNumber( 10527 );
 		LUA->SetField( -2, "VersionNum" );
 
 		LUA->PushCFunction( GetClientCount );

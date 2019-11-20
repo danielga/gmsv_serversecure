@@ -1,9 +1,10 @@
-#include <filecheck.hpp>
-#include <main.hpp>
+#include "filecheck.hpp"
+#include "main.hpp"
+
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/Lua/Helpers.hpp>
-#include <stdint.h>
-#include <stddef.h>
+#include <cstdint>
+#include <cstddef>
 #include <string>
 #include <networkstringtabledefs.h>
 #include <cstring>
@@ -25,16 +26,16 @@ namespace filecheck
 
 #if defined SYSTEM_WINDOWS
 
-	static const char CNetChan__IsValidFileForTransfer_sig[] =
-		"\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x85\xDB\x0F\x84";
-	static const size_t CNetChan__IsValidFileForTransfer_siglen =
-		sizeof( CNetChan__IsValidFileForTransfer_sig ) - 1;
+	static const std::vector<Symbol> CNetChan__IsValidFileForTransfer_syms = {
+		Symbol::FromName( "?IsValidFileForTransfer@CNetChan@@SA_NPBD@Z" ),
+		Symbol::FromSignature( "\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x85\xDB\x0F\x84" )
+	};
 
 #elif defined SYSTEM_POSIX
 
-	static const char CNetChan__IsValidFileForTransfer_sig[] =
-		"@_ZN8CNetChan22IsValidFileForTransferEPKc";
-	static const size_t CNetChan__IsValidFileForTransfer_siglen = 0;
+	static const std::vector<Symbol> CNetChan__IsValidFileForTransfer_syms = {
+		Symbol::FromName( "_ZN8CNetChan22IsValidFileForTransferEPKc" )
+	};
 
 #endif
 
@@ -91,7 +92,7 @@ namespace filecheck
 
 	inline bool BlockDownload( [[maybe_unused]] const char *filepath )
 	{
-		DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
+		_DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 		return false;
 	}
 
@@ -133,7 +134,7 @@ namespace filecheck
 		nicefile.resize( std::strlen( nicefile.c_str( ) ) );
 		filepath = nicefile.c_str( );
 
-		DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
+		_DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
 
 		if( !Call( filepath ) )
 			return BlockDownload( filepath );
@@ -157,12 +158,17 @@ namespace filecheck
 		{
 			SymbolFinder symfinder;
 
-			CNetChan__IsValidFileForTransfer_original =
-				reinterpret_cast<CNetChan__IsValidFileForTransfer_t>( symfinder.Resolve(
-					global::engine_loader.GetModuleLoader( ).GetModule( ),
-					CNetChan__IsValidFileForTransfer_sig,
-					CNetChan__IsValidFileForTransfer_siglen
-				) );
+			for( const auto &symbol : CNetChan__IsValidFileForTransfer_syms )
+			{
+				CNetChan__IsValidFileForTransfer_original =
+					reinterpret_cast<CNetChan__IsValidFileForTransfer_t>( symfinder.Resolve(
+						global::engine_loader.GetModule( ),
+						symbol.name.c_str( ),
+						symbol.length
+					) );
+				if( CNetChan__IsValidFileForTransfer_original != nullptr )
+					break;
+			}
 		}
 
 		if( CNetChan__IsValidFileForTransfer_original == nullptr )

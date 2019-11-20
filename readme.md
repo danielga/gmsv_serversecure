@@ -1,7 +1,6 @@
 # gmsv_serversecure
 
-[![Build Status](https://travis-ci.org/danielga/gmsv_serversecure.svg?branch=master)](https://travis-ci.org/danielga/gmsv_serversecure)  
-[![Build status](https://ci.appveyor.com/api/projects/status/pasfddwn1oboem7m?svg=true)](https://ci.appveyor.com/project/danielga/gmsv-serversecure)  
+[![Build Status](https://metamann.visualstudio.com/GitHub%20danielga/_apis/build/status/danielga.gmsv_serversecure?branchName=master)](https://metamann.visualstudio.com/GitHub%20danielga/_build/latest?definitionId=7&branchName=master)  
 A module for Garry's Mod that mitigates exploits on the Source engine.  
 Based on these plugins from AzuiSleet:  
 [serverplugin_serversecure][1]  
