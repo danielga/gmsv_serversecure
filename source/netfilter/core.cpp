@@ -23,6 +23,7 @@
 #if defined SYSTEM_WINDOWS
 
 #define WIN32_LEAN_AND_MEAN
+#define CALLING_CONVENTION __stdcall
 
 #include <WinSock2.h>
 #include <Ws2tcpip.h>
@@ -34,6 +35,8 @@ typedef int32_t socklen_t;
 typedef int32_t recvlen_t;
 
 #elif defined SYSTEM_LINUX
+
+#define CALLING_CONVENTION
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -49,6 +52,8 @@ typedef int32_t recvlen_t;
 static const SOCKET INVALID_SOCKET = -1;
 
 #elif defined SYSTEM_MACOSX
+
+#define CALLING_CONVENTION
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -151,7 +156,7 @@ namespace netfilter
 	static SourceSDK::ModuleLoader dedicated_loader( "dedicated" );
 	static SourceSDK::FactoryLoader server_loader( "server" );
 
-	static ssize_t recvfrom_detour(
+	static ssize_t CALLING_CONVENTION recvfrom_detour(
 		SOCKET s,
 		void *buf,
 		recvlen_t buflen,
@@ -161,7 +166,15 @@ namespace netfilter
 	);
 	typedef decltype( recvfrom_detour ) *recvfrom_t;
 
+#ifdef PLATFORM_WINDOWS
+
+	static Detouring::Hook recvfrom_hook( "ws2_32", "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
+
+#else
+
 	static Detouring::Hook recvfrom_hook( "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
+
+#endif
 
 	static SOCKET game_socket = INVALID_SOCKET;
 
@@ -546,7 +559,7 @@ namespace netfilter
 		return threaded_socket_queue.empty( );
 	}
 
-	static ssize_t recvfrom_detour(
+	static ssize_t CALLING_CONVENTION recvfrom_detour(
 		SOCKET s,
 		void *buf,
 		recvlen_t buflen,
