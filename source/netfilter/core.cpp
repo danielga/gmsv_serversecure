@@ -7,6 +7,7 @@
 #include <detouring/hook.hpp>
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <queue>
 #include <string>
 #include <eiface.h>
@@ -23,6 +24,7 @@
 #if defined SYSTEM_WINDOWS
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #define CALLING_CONVENTION __stdcall
 
 #include <WinSock2.h>
@@ -31,7 +33,6 @@
 #include <atomic>
 
 typedef int32_t ssize_t;
-typedef int32_t socklen_t;
 typedef int32_t recvlen_t;
 
 #elif defined SYSTEM_LINUX
@@ -47,7 +48,7 @@ typedef int32_t recvlen_t;
 #include <atomic>
 
 typedef int32_t SOCKET;
-typedef int32_t recvlen_t;
+typedef size_t recvlen_t;
 
 static const SOCKET INVALID_SOCKET = -1;
 
@@ -64,7 +65,7 @@ static const SOCKET INVALID_SOCKET = -1;
 #include <atomic>
 
 typedef int32_t SOCKET;
-typedef int32_t recvlen_t;
+typedef size_t recvlen_t;
 
 static const SOCKET INVALID_SOCKET = -1;
 
@@ -104,11 +105,11 @@ namespace netfilter
 		std::string tags;
 	};
 
-	enum PacketType
+	enum class PacketType
 	{
-		PacketTypeInvalid = -1,
-		PacketTypeGood,
-		PacketTypeInfo
+		Invalid = -1,
+		Good,
+		Info
 	};
 
 	typedef CUtlVector<netsocket_t> netsockets_t;
@@ -128,7 +129,7 @@ namespace netfilter
 	static const Symbol net_sockets_sym = Symbol::FromSignature(
 		"\x2A\x2A\x2A\x2A\x56\x57\x8B\x7D\x08\x8B\xF7\x03\xF6\x8B\x44\xF3\x0C\x85\xC0\x74\x0A\x57\x50" );
 
-	static const char operating_system_char = 'w';
+	static constexpr char operating_system_char = 'w';
 
 #elif defined SYSTEM_POSIX
 
@@ -140,9 +141,13 @@ namespace netfilter
 	static const Symbol net_sockets_sym = Symbol::FromName( "_ZL11net_sockets" );
 
 #if defined SYSTEM_LINUX
-	static const char operating_system_char = 'l';
+
+	static constexpr char operating_system_char = 'l';
+
 #elif defined SYSTEM_MACOSX
-	static const char operating_system_char = 'm';
+
+	static constexpr char operating_system_char = 'm';
+
 #endif
 
 #endif
@@ -186,14 +191,15 @@ namespace netfilter
 	static bool firewall_blacklist_enabled = false;
 	static std::unordered_set<uint32_t> firewall_blacklist;
 
-	static const size_t threaded_socket_max_queue = 1000;
+	static constexpr size_t threaded_socket_max_buffer = 8192;
+	static constexpr size_t threaded_socket_max_queue = 1000;
 	static std::atomic_bool threaded_socket_execute( true );
 	static ThreadHandle_t threaded_socket_handle = nullptr;
 	static std::queue<packet_t> threaded_socket_queue;
 	static CThreadFastMutex threaded_socket_mutex;
 
-	static const char *default_game_version = "2019.11.12";
-	static const uint8_t default_proto_version = 17;
+	static constexpr char default_game_version[] = "2019.11.12";
+	static constexpr uint8_t default_proto_version = 17;
 	static bool info_cache_enabled = false;
 	static reply_info_t reply_info;
 	static char info_cache_buffer[1024] = { 0 };
@@ -203,9 +209,9 @@ namespace netfilter
 
 	static ClientManager client_manager;
 
-	static const size_t packet_sampling_max_queue = 50;
-	static std::atomic_bool packet_sampling_enabled( false );
-	static std::deque<packet_t> packet_sampling_queue;
+	static constexpr size_t packet_sampling_max_queue = 50;
+	static bool packet_sampling_enabled = false;
+	static std::queue<packet_t> packet_sampling_queue;
 	static CThreadFastMutex packet_sampling_mutex;
 
 	static IServerGameDLL *gamedll = nullptr;
@@ -219,7 +225,7 @@ namespace netfilter
 		{
 			reply_info.game_dir.resize( 256 );
 			engine_server->GetGameDir( &reply_info.game_dir[0], static_cast<int32_t>( reply_info.game_dir.size( ) ) );
-			reply_info.game_dir.resize( strlen( reply_info.game_dir.c_str( ) ) );
+			reply_info.game_dir.resize( std::strlen( reply_info.game_dir.c_str( ) ) );
 
 			size_t pos = reply_info.game_dir.find_last_of( "\\/" );
 			if( pos != reply_info.game_dir.npos )
@@ -271,61 +277,77 @@ namespace netfilter
 		}
 	}
 
-	// maybe divide into low priority and high priority data?
-	// low priority would be VAC protection status for example
-	// updated on a much bigger period
 	static void BuildReplyInfo( )
 	{
-		// if vac protected, it activates itself some time after startup
+		const char *server_name = global::server->GetName( );
+		
+		const char *map_name = global::server->GetMapName( );
+
+		const char *game_dir = reply_info.game_dir.c_str( );
+
+		const char *game_desc = reply_info.game_desc.c_str( );
+
+		const int32_t appid = engine_server->GetAppID( );
+
+		const int32_t num_clients = global::server->GetNumClients( );
+
+		int32_t max_players =
+			sv_visiblemaxplayers != nullptr ? sv_visiblemaxplayers->GetInt( ) : -1;
+		if( max_players <= 0 || max_players > reply_info.max_clients )
+			max_players = reply_info.max_clients;
+
+		const int32_t num_fake_clients = global::server->GetNumFakeClients( );
+
+		const bool has_password = global::server->GetPassword( ) != nullptr;
+
 		if( !gameserver_context_initialized )
 			gameserver_context_initialized = gameserver_context.Init( );
 
-		ISteamGameServer *steamGS = nullptr;
+		bool vac_secure = false;
 		if( gameserver_context_initialized )
-			steamGS = gameserver_context.SteamGameServer( );
+		{
+			ISteamGameServer *steamGS = gameserver_context.SteamGameServer( );
+			if( steamGS != nullptr )
+				vac_secure = steamGS->BSecure( );
+		}
+
+		const char *game_version = reply_info.game_version.c_str( );
+
+		const int32_t udp_port = reply_info.udp_port;
+
+		const CSteamID *sid = engine_server->GetGameServerSteamID( );
+		const uint64_t steamid = sid != nullptr ? sid->ConvertToUint64( ) : 0;
+
+		const bool has_tags = !reply_info.tags.empty( );
+		const char *tags = has_tags ? reply_info.tags.c_str( ) : nullptr;
 
 		info_cache_packet.Reset( );
 
 		info_cache_packet.WriteLong( -1 ); // connectionless packet header
 		info_cache_packet.WriteByte( 'I' ); // packet type is always 'I'
 		info_cache_packet.WriteByte( default_proto_version );
-		info_cache_packet.WriteString( global::server->GetName( ) );
-		info_cache_packet.WriteString( global::server->GetMapName( ) );
-		info_cache_packet.WriteString( reply_info.game_dir.c_str( ) );
-		info_cache_packet.WriteString( reply_info.game_desc.c_str( ) );
-
-		int32_t appid = engine_server->GetAppID( );
+		info_cache_packet.WriteString( server_name );
+		info_cache_packet.WriteString( map_name );
+		info_cache_packet.WriteString( game_dir );
+		info_cache_packet.WriteString( game_desc );
 		info_cache_packet.WriteShort( appid );
-
-		info_cache_packet.WriteByte( global::server->GetNumClients( ) );
-		int32_t maxplayers =
-			sv_visiblemaxplayers != nullptr ? sv_visiblemaxplayers->GetInt( ) : -1;
-		if( maxplayers <= 0 || maxplayers > reply_info.max_clients )
-			maxplayers = reply_info.max_clients;
-		info_cache_packet.WriteByte( maxplayers );
-		info_cache_packet.WriteByte( global::server->GetNumFakeClients( ) );
+		info_cache_packet.WriteByte( num_clients );
+		info_cache_packet.WriteByte( max_players );
+		info_cache_packet.WriteByte( num_fake_clients );
 		info_cache_packet.WriteByte( 'd' ); // dedicated server identifier
 		info_cache_packet.WriteByte( operating_system_char );
-		info_cache_packet.WriteByte( global::server->GetPassword( ) != nullptr ? 1 : 0 );
-		bool vacsecure = steamGS != nullptr ? steamGS->BSecure( ) : false;
-		info_cache_packet.WriteByte( vacsecure );
-		info_cache_packet.WriteString( reply_info.game_version.c_str( ) );
-
-		const CSteamID *sid = engine_server->GetGameServerSteamID( );
-		uint64_t steamid = 0;
-		if( sid != nullptr )
-			steamid = sid->ConvertToUint64( );
-
-		bool notags = reply_info.tags.empty( );
+		info_cache_packet.WriteByte( has_password ? 1 : 0 );
+		info_cache_packet.WriteByte( vac_secure );
+		info_cache_packet.WriteString( game_version );
 		// 0x80 - port number is present
 		// 0x10 - server steamid is present
 		// 0x20 - tags are present
 		// 0x01 - game long appid is present
-		info_cache_packet.WriteByte( 0x80 | 0x10 | ( notags ? 0x00 : 0x20 ) | 0x01 );
-		info_cache_packet.WriteShort( reply_info.udp_port );
+		info_cache_packet.WriteByte( 0x80 | 0x10 | ( has_tags ? 0x20 : 0x00 ) | 0x01 );
+		info_cache_packet.WriteShort( udp_port );
 		info_cache_packet.WriteLongLong( steamid );
-		if( !notags )
-			info_cache_packet.WriteString( reply_info.tags.c_str( ) );
+		if( has_tags )
+			info_cache_packet.WriteString( tags );
 		info_cache_packet.WriteLongLong( appid );
 	}
 
@@ -346,19 +368,19 @@ namespace netfilter
 			sizeof( from )
 		);
 
-		return PacketTypeInvalid; // we've handled it
+		return PacketType::Invalid; // we've handled it
 	}
 
 	inline PacketType HandleInfoQuery( const sockaddr_in &from )
 	{
 		const uint32_t time = static_cast<uint32_t>( Plat_FloatTime( ) );
 		if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
-			return PacketTypeInvalid;
+			return PacketType::Invalid;
 
 		if( info_cache_enabled )
 			return SendInfoCache( from, time );
 
-		return PacketTypeGood;
+		return PacketType::Good;
 	}
 
 	inline const char *IPToString( const in_addr &addr )
@@ -381,11 +403,11 @@ namespace netfilter
 				len,
 				IPToString( from.sin_addr )
 			);
-			return PacketTypeInvalid;
+			return PacketType::Invalid;
 		}
 
 		if( len < 5 )
-			return PacketTypeGood;
+			return PacketType::Good;
 
 		int32_t channel = *reinterpret_cast<const int32_t *>( data );
 		if( channel == -2 )
@@ -396,11 +418,11 @@ namespace netfilter
 				channel,
 				IPToString( from.sin_addr )
 			);
-			return PacketTypeInvalid;
+			return PacketType::Invalid;
 		}
 
 		if( channel != -1 )
-			return PacketTypeGood;
+			return PacketType::Good;
 
 		uint8_t type = *( data + 4 );
 		if( packet_validation_enabled )
@@ -418,7 +440,7 @@ namespace netfilter
 						type,
 						IPToString( from.sin_addr )
 					);
-					return PacketTypeInvalid;
+					return PacketType::Invalid;
 				}
 
 				if( len >= 18 && strncmp( reinterpret_cast<const char *>( data + 5 ), "statusResponse", 14 ) == 0 )
@@ -430,18 +452,18 @@ namespace netfilter
 						type,
 						IPToString( from.sin_addr )
 					);
-					return PacketTypeInvalid;
+					return PacketType::Invalid;
 				}
 
-				return PacketTypeGood;
+				return PacketType::Good;
 
 			case 'T': // server info request
 				return len == 25 && strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) == 0 ?
-					PacketTypeInfo : PacketTypeInvalid;
+					PacketType::Info : PacketType::Invalid;
 
 			case 'U': // player info request
 			case 'V': // rules request
-				return len == 9 ? PacketTypeGood : PacketTypeInvalid;
+				return len == 9 ? PacketType::Good : PacketType::Invalid;
 
 			case 'q': // connection handshake init
 			case 'k': // steam auth packet
@@ -452,7 +474,7 @@ namespace netfilter
 					type,
 					IPToString( from.sin_addr )
 				);
-				return PacketTypeGood;
+				return PacketType::Good;
 			}
 
 			_DebugWarning(
@@ -462,10 +484,10 @@ namespace netfilter
 				type,
 				IPToString( from.sin_addr )
 			);
-			return PacketTypeInvalid;
+			return PacketType::Invalid;
 		}
 
-		return type == 'T' ? PacketTypeInfo : PacketTypeGood;
+		return type == 'T' ? PacketType::Info : PacketType::Good;
 	}
 
 	inline bool IsAddressAllowed( const sockaddr_in &addr )
@@ -474,11 +496,11 @@ namespace netfilter
 			(
 				!firewall_whitelist_enabled ||
 				firewall_whitelist.find( addr.sin_addr.s_addr ) != firewall_whitelist.end( )
-				) &&
-				(
-					!firewall_blacklist_enabled ||
-					firewall_blacklist.find( addr.sin_addr.s_addr ) == firewall_blacklist.end( )
-					);
+			) &&
+			(
+				!firewall_blacklist_enabled ||
+				firewall_blacklist.find( addr.sin_addr.s_addr ) == firewall_blacklist.end( )
+			);
 	}
 
 	inline int32_t HandleNetError( int32_t value )
@@ -498,12 +520,50 @@ namespace netfilter
 		return value;
 	}
 
-	inline packet_t GetQueuedPacket( )
+	inline bool IsPacketQueueFull( )
 	{
 		AUTO_LOCK( threaded_socket_mutex );
-		packet_t p = threaded_socket_queue.front( );
+		return threaded_socket_queue.size( ) >= threaded_socket_max_queue;
+	}
+
+	inline bool PopPacketFromQueue( packet_t &p )
+	{
+		AUTO_LOCK( threaded_socket_mutex );
+
+		if( threaded_socket_queue.empty( ) )
+			return false;
+
+		p = std::move( threaded_socket_queue.front( ) );
 		threaded_socket_queue.pop( );
-		return p;
+		return true;
+	}
+
+	inline void PushPacketToQueue( packet_t &&p )
+	{
+		AUTO_LOCK( threaded_socket_mutex );
+		threaded_socket_queue.emplace( std::move( p ) );
+	}
+
+	inline void PushPacketToSamplingQueue( packet_t &&p )
+	{
+		AUTO_LOCK( packet_sampling_mutex );
+
+		if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
+			packet_sampling_queue.pop( );
+
+		packet_sampling_queue.emplace( std::move( p ) );
+	}
+
+	inline bool PopPacketFromSamplingQueue( packet_t &p )
+	{
+		AUTO_LOCK( packet_sampling_mutex );
+
+		if( packet_sampling_queue.empty( ) )
+			return false;
+
+		p = std::move( packet_sampling_queue.front( ) );
+		packet_sampling_queue.pop( );
+		return true;
 	}
 
 	static ssize_t ReceiveAndAnalyzePacket(
@@ -515,8 +575,11 @@ namespace netfilter
 		socklen_t *fromlen
 	)
 	{
-		sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
-		ssize_t len = recvfrom_hook.GetTrampoline<recvfrom_t>( )( s, buf, buflen, flags, from, fromlen );
+		auto trampoline = recvfrom_hook.GetTrampoline<recvfrom_t>( );
+		if( trampoline == nullptr )
+			return -1;
+
+		const ssize_t len = trampoline( s, buf, buflen, flags, from, fromlen );
 		if( len == -1 )
 			return -1;
 
@@ -524,37 +587,22 @@ namespace netfilter
 		if( packet_sampling_enabled )
 		{
 			packet_t p;
-			memcpy( &p.address, from, *fromlen );
+			std::memcpy( &p.address, from, *fromlen );
 			p.address_size = *fromlen;
 			p.buffer.assign( buffer, buffer + len );
 
-			AUTO_LOCK( packet_sampling_mutex );
-
-			// there should only be packet_sampling_max_queue packets on the queue
-			// at the moment of this check
-			if( packet_sampling_queue.size( ) >= packet_sampling_max_queue )
-				packet_sampling_queue.pop_front( );
-
-			packet_sampling_queue.push_back( p );
+			PushPacketToSamplingQueue( std::move( p ) );
 		}
 
+		const sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
 		if( !IsAddressAllowed( infrom ) )
 			return -1;
 
 		PacketType type = ClassifyPacket( buffer, len, infrom );
-		if( type == PacketTypeInfo )
+		if( type == PacketType::Info )
 			type = HandleInfoQuery( infrom );
 
-		if( type == PacketTypeInvalid )
-			return -1;
-
-		return len;
-	}
-
-	inline bool IsPacketQueueEmpty( )
-	{
-		AUTO_LOCK( threaded_socket_mutex );
-		return threaded_socket_queue.empty( );
+		return type != PacketType::Invalid ? len : -1;
 	}
 
 	static ssize_t CALLING_CONVENTION recvfrom_detour(
@@ -567,51 +615,29 @@ namespace netfilter
 	)
 	{
 		if( s != game_socket )
-			return recvfrom_hook.GetTrampoline<recvfrom_t>( )( s, buf, buflen, flags, from, fromlen );
+		{
+			auto trampoline = recvfrom_hook.GetTrampoline<recvfrom_t>( );
+			return trampoline != nullptr ? trampoline( s, buf, buflen, flags, from, fromlen ) : -1;
+		}
 		
-		bool queue_empty = IsPacketQueueEmpty( );
-		if( !threaded_socket_enabled && queue_empty )
-			return HandleNetError(
-				ReceiveAndAnalyzePacket( s, buf, buflen, flags, from, fromlen )
-			);
-
-		if( queue_empty )
+		packet_t p;
+		const bool has_packet = PopPacketFromQueue( p );
+		if( !has_packet )
 			return HandleNetError( -1 );
 
-		packet_t p = GetQueuedPacket( );
-		int32_t len = static_cast<int32_t>( p.buffer.size( ) );
-		if( len > buflen )
-			len = buflen;
+		const ssize_t len = std::min( static_cast<ssize_t>( p.buffer.size( ) ), static_cast<ssize_t>( buflen ) );
+		p.buffer.resize( static_cast<size_t>( len ) );
+		std::copy( p.buffer.begin( ), p.buffer.end( ), static_cast<uint8_t *>( buf ) );
 
-		size_t addrlen = static_cast<size_t>( *fromlen );
-		if( addrlen > sizeof( p.address ) )
-			addrlen = sizeof( p.address );
-
-		memcpy( buf, &p.buffer[0], len );
-		memcpy( from, &p.address, addrlen );
-		*fromlen = p.address_size;
+		const socklen_t addrlen = std::min( *fromlen, p.address_size );
+		std::memcpy( from, &p.address, static_cast<size_t>( addrlen ) );
+		*fromlen = addrlen;
 
 		return len;
 	}
 
-	inline bool IsPacketQueueFull( )
-	{
-		AUTO_LOCK( threaded_socket_mutex );
-		return threaded_socket_queue.size( ) >= threaded_socket_max_queue;
-	}
-
-	inline void PushPacketToQueue( const packet_t &p )
-	{
-		AUTO_LOCK( threaded_socket_mutex );
-		threaded_socket_queue.push( p );
-	}
-
 	static uintp PacketReceiverThread( void * )
 	{
-		timeval ms100 = { 0, 100000 };
-		char tempbuf[65535] = { 0 };
-		fd_set readables;
-
 		while( threaded_socket_execute )
 		{
 			if( IsPacketQueueFull( ) )
@@ -620,18 +646,20 @@ namespace netfilter
 				continue;
 			}
 
+			fd_set readables;
 			FD_ZERO( &readables );
 			FD_SET( game_socket, &readables );
-			int res = select( game_socket + 1, &readables, nullptr, nullptr, &ms100 );
-			ms100.tv_usec = 100000;
+			timeval timeout = { 0, 100000 };
+			const int32_t res = select( game_socket + 1, &readables, nullptr, nullptr, &timeout );
 			if( res == -1 || !FD_ISSET( game_socket, &readables ) )
 				continue;
 
 			packet_t p;
-			ssize_t len = ReceiveAndAnalyzePacket(
+			p.buffer.resize( threaded_socket_max_buffer );
+			const ssize_t len = ReceiveAndAnalyzePacket(
 				game_socket,
-				tempbuf,
-				sizeof( tempbuf ),
+				p.buffer.data( ),
+				static_cast<recvlen_t>( threaded_socket_max_buffer ),
 				0,
 				reinterpret_cast<sockaddr *>( &p.address ),
 				&p.address_size
@@ -639,9 +667,9 @@ namespace netfilter
 			if( len == -1 )
 				continue;
 
-			p.buffer.assign( tempbuf, tempbuf + len );
+			p.buffer.resize( static_cast<size_t>( len ) );
 
-			PushPacketToQueue( p );
+			PushPacketToQueue( std::move( p ) );
 		}
 
 		return 0;
@@ -769,28 +797,16 @@ namespace netfilter
 		if( !packet_sampling_enabled )
 		{
 			AUTO_LOCK( packet_sampling_mutex );
-			packet_sampling_queue.clear( );
+			std::queue<packet_t>( ).swap( packet_sampling_queue );
 		}
 
 		return 0;
 	}
 
-	inline packet_t GetSamplePacket( )
-	{
-		AUTO_LOCK( packet_sampling_mutex );
-
-		if( packet_sampling_queue.empty( ) )
-			return packet_t( );
-
-		packet_t p = packet_sampling_queue.front( );
-		packet_sampling_queue.pop_front( );
-		return p;
-	}
-
 	LUA_FUNCTION_STATIC( GetSamplePacket )
 	{
-		packet_t p = GetSamplePacket( );
-		if( p.address.sin_addr.s_addr == 0 )
+		packet_t p;
+		if( !PopPacketFromSamplingQueue( p ) )
 			return 0;
 
 		LUA->PushNumber( p.address.sin_addr.s_addr );
@@ -814,7 +830,7 @@ namespace netfilter
 
 		engine_server = global::engine_loader.GetInterface<IVEngineServer>(
 			INTERFACEVERSION_VENGINESERVER
-			);
+		);
 		if( engine_server == nullptr )
 			LUA->ThrowError( "failed to load required IVEngineServer interface" );
 
