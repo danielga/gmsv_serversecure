@@ -187,7 +187,6 @@ namespace netfilter
 	static std::unordered_set<uint32_t> firewall_blacklist;
 
 	static const size_t threaded_socket_max_queue = 1000;
-	static std::atomic_bool threaded_socket_enabled( false );
 	static std::atomic_bool threaded_socket_execute( true );
 	static ThreadHandle_t threaded_socket_handle = nullptr;
 	static std::queue<packet_t> threaded_socket_queue;
@@ -616,9 +615,7 @@ namespace netfilter
 
 		while( threaded_socket_execute )
 		{
-			if( !threaded_socket_enabled || IsPacketQueueFull( ) )
-				// testing for maximum queue size, this is a very cheap "fix"
-				// the socket itself has a queue too but will start dropping packets when full
+			if( IsPacketQueueFull( ) )
 			{
 				ThreadSleep( 100 );
 				continue;
@@ -651,22 +648,10 @@ namespace netfilter
 		return 0;
 	}
 
-	inline void SetReceiveDetourStatus( bool enabled )
-	{
-		if( enabled )
-			recvfrom_hook.Enable( );
-		else if( !firewall_whitelist_enabled &&
-			!firewall_blacklist_enabled &&
-			!packet_validation_enabled &&
-			!threaded_socket_enabled )
-			recvfrom_hook.Disable( );
-	}
-
 	LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 	{
 		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 		firewall_whitelist_enabled = LUA->GetBool( 1 );
-		SetReceiveDetourStatus( firewall_whitelist_enabled );
 		return 0;
 	}
 
@@ -695,7 +680,6 @@ namespace netfilter
 	{
 		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 		firewall_blacklist_enabled = LUA->GetBool( 1 );
-		SetReceiveDetourStatus( firewall_blacklist_enabled );
 		return 0;
 	}
 
@@ -724,15 +708,6 @@ namespace netfilter
 	{
 		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
 		packet_validation_enabled = LUA->GetBool( 1 );
-		SetReceiveDetourStatus( packet_validation_enabled );
-		return 0;
-	}
-
-	LUA_FUNCTION_STATIC( EnableThreadedSocket )
-	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
-		threaded_socket_enabled = LUA->GetBool( 1 );
-		SetReceiveDetourStatus( threaded_socket_enabled );
 		return 0;
 	}
 
@@ -938,6 +913,9 @@ namespace netfilter
 		if( game_socket == INVALID_SOCKET )
 			LUA->ThrowError( "got an invalid server socket" );
 
+		if( !recvfrom_hook.Enable( ) )
+			LUA->ThrowError( "failed to detour recvfrom" );
+
 		threaded_socket_execute = true;
 		threaded_socket_handle = CreateSimpleThread( PacketReceiverThread, nullptr );
 		if( threaded_socket_handle == nullptr )
@@ -971,9 +949,6 @@ namespace netfilter
 
 		LUA->PushCFunction( EnablePacketValidation );
 		LUA->SetField( -2, "EnablePacketValidation" );
-
-		LUA->PushCFunction( EnableThreadedSocket );
-		LUA->SetField( -2, "EnableThreadedSocket" );
 
 		LUA->PushCFunction( EnableInfoCache );
 		LUA->SetField( -2, "EnableInfoCache" );

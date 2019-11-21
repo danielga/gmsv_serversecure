@@ -28,8 +28,12 @@ function serversecure.StringToIP(str)
 	return ((d * 256 + c) * 256 + b) * 256 + a
 end
 
+function serversecure.EnableThreadedSocket()
+	print("[ServerSecure] serversecure.EnableThreadedSocket is deprecated!")
+end
+
 function serversecure.PostInitialize()
-	print("[ServerSecure] serversecure.PostInitialize is deprecated since it's not needed anymore!")
+	print("[ServerSecure] serversecure.PostInitialize is deprecated!")
 	return true
 end
 
