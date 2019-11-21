@@ -208,7 +208,6 @@ namespace netfilter
 	static std::deque<packet_t> packet_sampling_queue;
 	static CThreadFastMutex packet_sampling_mutex;
 
-	static CGlobalVars *globalvars = nullptr;
 	static IServerGameDLL *gamedll = nullptr;
 	static IVEngineServer *engine_server = nullptr;
 	static IFileSystem *filesystem = nullptr;
@@ -352,7 +351,7 @@ namespace netfilter
 
 	inline PacketType HandleInfoQuery( const sockaddr_in &from )
 	{
-		uint32_t time = static_cast<uint32_t>( globalvars->realtime );
+		const uint32_t time = static_cast<uint32_t>( Plat_FloatTime( ) );
 		if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
 			return PacketTypeInvalid;
 
@@ -818,16 +817,6 @@ namespace netfilter
 			);
 		if( engine_server == nullptr )
 			LUA->ThrowError( "failed to load required IVEngineServer interface" );
-
-		IPlayerInfoManager *playerinfo = server_loader.GetInterface<IPlayerInfoManager>(
-			INTERFACEVERSION_PLAYERINFOMANAGER
-			);
-		if( playerinfo == nullptr )
-			LUA->ThrowError( "failed to load required IPlayerInfoManager interface" );
-
-		globalvars = playerinfo->GetGlobalVars( );
-		if( globalvars == nullptr )
-			LUA->ThrowError( "failed to load required CGlobalVars interface" );
 
 		{
 			SymbolFinder symfinder;
