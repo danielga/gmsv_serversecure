@@ -22,14 +22,15 @@ Symbol Symbol::FromName( const std::string &name )
 
 namespace global
 {
-	static const std::string CGameServer_sym = "sv";
 
 #if defined SYSTEM_WINDOWS
 
+	static const std::string CGameServer_sym = "?sv@@3VCGameServer@@A";
 	static const Symbol IServer_sym = Symbol::FromSignature( "\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xD8\x6D\x24\x83\x4D\xEC\x10" );
 
 #elif defined SYSTEM_POSIX
 
+	static const std::string CGameServer_sym = "sv";
 	static const Symbol IServer_sym = Symbol::FromName( "sv" );
 
 #endif

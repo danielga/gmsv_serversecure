@@ -119,13 +119,13 @@ namespace netfilter
 #if defined SYSTEM_WINDOWS
 
 	static const std::vector<Symbol> FileSystemFactory_syms = {
-		Symbol::FromName( "?FileSystemFactory@@YAPAXPBDPAH@Z" ),
+		Symbol::FromName( "?FileSystemFactory@@YAPEAXPEBDPEAH@Z" ),
 		Symbol::FromSignature( "\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8" )
 	};
 
 	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
 
-	static const std::string GetNetSocket_sym = "?GMOD_GetNetSocket@@YAPAUnetsocket_t@@H@Z";
+	static const std::string GetNetSocket_sym = "?GMOD_GetNetSocket@@YAPEAUnetsocket_t@@H@Z";
 	static const Symbol net_sockets_sym = Symbol::FromSignature(
 		"\x2A\x2A\x2A\x2A\x56\x57\x8B\x7D\x08\x8B\xF7\x03\xF6\x8B\x44\xF3\x0C\x85\xC0\x74\x0A\x57\x50" );
 

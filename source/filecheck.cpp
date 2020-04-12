@@ -27,7 +27,7 @@ namespace filecheck
 #if defined SYSTEM_WINDOWS
 
 	static const std::vector<Symbol> CNetChan__IsValidFileForTransfer_syms = {
-		Symbol::FromName( "?IsValidFileForTransfer@CNetChan@@SA_NPBD@Z" ),
+		Symbol::FromName( "?IsValidFileForTransfer@CNetChan@@SA_NPEBD@Z" ),
 		Symbol::FromSignature( "\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x85\xDB\x0F\x84" )
 	};
 
