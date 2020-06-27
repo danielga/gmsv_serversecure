@@ -1,8 +1,9 @@
 #pragma once
 
+#include <GarrysMod/FactoryLoader.hpp>
+
 #include <string>
 #include <vector>
-#include <GarrysMod/FactoryLoader.hpp>
 
 #if defined DEBUG
 
@@ -20,20 +21,8 @@
 
 class IServer;
 
-struct Symbol
-{
-	std::string name;
-	size_t length;
-
-	Symbol( const std::string &nam, size_t len = 0 );
-
-	static Symbol FromSignature( const std::string &signature );
-	static Symbol FromName( const std::string &name );
-};
-
 namespace global
 {
-	extern SourceSDK::FactoryLoader engine_loader;
 	extern IServer *server;
 
 #if defined DEBUG

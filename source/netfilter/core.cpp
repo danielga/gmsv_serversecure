@@ -3,13 +3,12 @@
 #include "main.hpp"
 
 #include <GarrysMod/Lua/Interface.h>
-#include <GarrysMod/FactoryLoader.hpp>
+#include <GarrysMod/InterfacePointers.hpp>
+#include <GarrysMod/FunctionPointers.hpp>
+#include <Platform.hpp>
+
 #include <detouring/hook.hpp>
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
-#include <queue>
-#include <string>
+
 #include <eiface.h>
 #include <filesystem_stdio.h>
 #include <iserver.h>
@@ -18,17 +17,22 @@
 #include <bitbuf.h>
 #include <steam/steam_gameserver.h>
 #include <game/server/iplayerinfo.h>
-#include <scanning/symbolfinder.hpp>
-#include <Platform.hpp>
+
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+#include <queue>
+#include <string>
 
 #if defined SYSTEM_WINDOWS
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#define CALLING_CONVENTION __stdcall
+#define SERVERSECURE_CALLING_CONVENTION __stdcall
 
 #include <WinSock2.h>
 #include <Ws2tcpip.h>
+
 #include <unordered_set>
 #include <atomic>
 
@@ -37,13 +41,14 @@ typedef int32_t recvlen_t;
 
 #elif defined SYSTEM_LINUX
 
-#define CALLING_CONVENTION
+#define SERVERSECURE_CALLING_CONVENTION
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+
 #include <unordered_set>
 #include <atomic>
 
@@ -54,13 +59,14 @@ static const SOCKET INVALID_SOCKET = -1;
 
 #elif defined SYSTEM_MACOSX
 
-#define CALLING_CONVENTION
+#define SERVERSECURE_CALLING_CONVENTION
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+
 #include <unordered_set>
 #include <atomic>
 
@@ -72,6 +78,14 @@ static const SOCKET INVALID_SOCKET = -1;
 #endif
 
 class CBaseServer;
+
+struct netsocket_t
+{
+	int32_t nPort;
+	bool bListening;
+	int32_t hUDP;
+	int32_t hTCP;
+};
 
 namespace netfilter
 {
@@ -85,14 +99,6 @@ namespace netfilter
 		sockaddr_in address;
 		socklen_t address_size;
 		std::vector<uint8_t> buffer;
-	};
-
-	struct netsocket_t
-	{
-		int32_t nPort;
-		bool bListening;
-		int32_t hUDP;
-		int32_t hTCP;
 	};
 
 	struct reply_info_t
@@ -112,43 +118,17 @@ namespace netfilter
 		Info
 	};
 
-	typedef CUtlVector<netsocket_t> netsockets_t;
-
-	typedef netsocket_t *( *GetNetSocket_t )( int idx );
-
 #if defined SYSTEM_WINDOWS
-
-	static const std::vector<Symbol> FileSystemFactory_syms = {
-		Symbol::FromName( "?FileSystemFactory@@YAPEAXPEBDPEAH@Z" ),
-		Symbol::FromSignature( "\x55\x8B\xEC\x68\x2A\x2A\x2A\x2A\xFF\x75\x08\xE8" )
-	};
-
-	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
-
-	static const std::string GetNetSocket_sym = "?GMOD_GetNetSocket@@YAPEAUnetsocket_t@@H@Z";
-	static const Symbol net_sockets_sym = Symbol::FromSignature(
-		"\x2A\x2A\x2A\x2A\x56\x57\x8B\x7D\x08\x8B\xF7\x03\xF6\x8B\x44\xF3\x0C\x85\xC0\x74\x0A\x57\x50" );
 
 	static constexpr char operating_system_char = 'w';
 
 #elif defined SYSTEM_POSIX
-
-	static const std::vector<Symbol> FileSystemFactory_syms = { Symbol::FromName( "_Z17FileSystemFactoryPKcPi" ) };
-
-	static const Symbol g_pFullFileSystem_sym = Symbol::FromName( "g_pFullFileSystem" );
-
-	static const std::string GetNetSocket_sym = "_Z17GMOD_GetNetSocketi";
-	static const Symbol net_sockets_sym = Symbol::FromName( "_ZL11net_sockets" );
-
-#if defined SYSTEM_LINUX
 
 	static constexpr char operating_system_char = 'l';
 
 #elif defined SYSTEM_MACOSX
 
 	static constexpr char operating_system_char = 'm';
-
-#endif
 
 #endif
 
@@ -161,7 +141,7 @@ namespace netfilter
 	static SourceSDK::ModuleLoader dedicated_loader( "dedicated" );
 	static SourceSDK::FactoryLoader server_loader( "server" );
 
-	static ssize_t CALLING_CONVENTION recvfrom_detour(
+	static ssize_t SERVERSECURE_CALLING_CONVENTION recvfrom_detour(
 		SOCKET s,
 		void *buf,
 		recvlen_t buflen,
@@ -605,7 +585,7 @@ namespace netfilter
 		return type != PacketType::Invalid ? len : -1;
 	}
 
-	static ssize_t CALLING_CONVENTION recvfrom_detour(
+	static ssize_t SERVERSECURE_CALLING_CONVENTION recvfrom_detour(
 		SOCKET s,
 		void *buf,
 		recvlen_t buflen,
@@ -677,7 +657,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( EnableFirewallWhitelist )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 		firewall_whitelist_enabled = LUA->GetBool( 1 );
 		return 0;
 	}
@@ -685,14 +665,14 @@ namespace netfilter
 	// Whitelisted IPs bytes need to be in network order (big endian)
 	LUA_FUNCTION_STATIC( AddWhitelistIP )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		firewall_whitelist.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( RemoveWhitelistIP )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		firewall_whitelist.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
@@ -705,7 +685,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( EnableFirewallBlacklist )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 		firewall_blacklist_enabled = LUA->GetBool( 1 );
 		return 0;
 	}
@@ -713,14 +693,14 @@ namespace netfilter
 	// Blacklisted IPs bytes need to be in network order (big endian)
 	LUA_FUNCTION_STATIC( AddBlacklistIP )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		firewall_blacklist.insert( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( RemoveBlacklistIP )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		firewall_blacklist.erase( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
@@ -733,21 +713,21 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( EnablePacketValidation )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 		packet_validation_enabled = LUA->GetBool( 1 );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( EnableInfoCache )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 		info_cache_enabled = LUA->GetBool( 1 );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( SetInfoCacheTime )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		info_cache_time = static_cast<uint32_t>( LUA->GetNumber( 1 ) );
 		return 0;
 	}
@@ -761,28 +741,28 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( EnableQueryLimiter )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 		client_manager.SetState( LUA->GetBool( 1 ) );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( SetMaxQueriesWindow )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		client_manager.SetMaxQueriesWindow( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( SetMaxQueriesPerSecond )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		client_manager.SetMaxQueriesPerSecond( static_cast<uint32_t>( LUA->GetNumber( 1 ) ) );
 		return 0;
 	}
 
 	LUA_FUNCTION_STATIC( SetGlobalMaxQueriesPerSecond )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::NUMBER );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Number );
 		client_manager.SetGlobalMaxQueriesPerSecond(
 			static_cast<uint32_t>( LUA->GetNumber( 1 ) )
 		);
@@ -791,7 +771,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( EnablePacketSampling )
 	{
-		LUA->CheckType( 1, GarrysMod::Lua::Type::BOOL );
+		LUA->CheckType( 1, GarrysMod::Lua::Type::Bool );
 
 		packet_sampling_enabled = LUA->GetBool( 1 );
 		if( !packet_sampling_enabled )
@@ -820,100 +800,29 @@ namespace netfilter
 		if( !server_loader.IsValid( ) )
 			LUA->ThrowError( "unable to get server factory" );
 
-		ICvar *icvar = icvar_loader.GetInterface<ICvar>( CVAR_INTERFACE_VERSION );
+		ICvar *icvar = InterfacePointers::Cvar( );
 		if( icvar != nullptr )
 			sv_visiblemaxplayers = icvar->FindVar( "sv_visiblemaxplayers" );
 
-		gamedll = server_loader.GetInterface<IServerGameDLL>( INTERFACEVERSION_SERVERGAMEDLL );
+		gamedll = InterfacePointers::ServerGameDLL( );
 		if( gamedll == nullptr )
 			LUA->ThrowError( "failed to load required IServerGameDLL interface" );
 
-		engine_server = global::engine_loader.GetInterface<IVEngineServer>(
-			INTERFACEVERSION_VENGINESERVER
-		);
+		engine_server = InterfacePointers::VEngineServer( );
 		if( engine_server == nullptr )
 			LUA->ThrowError( "failed to load required IVEngineServer interface" );
 
-		{
-			SymbolFinder symfinder;
-
-			CreateInterfaceFn factory = nullptr;
-			for( const auto &symbol : FileSystemFactory_syms )
-			{
-				factory = reinterpret_cast<CreateInterfaceFn>( symfinder.Resolve(
-					dedicated_loader.GetModule( ),
-					symbol.name.c_str( ),
-					symbol.length
-				) );
-				if( factory != nullptr )
-					break;
-			}
-
-			if( factory == nullptr )
-			{
-				IFileSystem **filesystem_ptr =
-					reinterpret_cast<IFileSystem **>( symfinder.Resolve(
-						dedicated_loader.GetModule( ),
-						g_pFullFileSystem_sym.name.c_str( ),
-						g_pFullFileSystem_sym.length
-					) );
-				if( filesystem_ptr == nullptr )
-					filesystem_ptr =
-					reinterpret_cast<IFileSystem **>( symfinder.Resolve(
-						server_loader.GetModule( ),
-						g_pFullFileSystem_sym.name.c_str( ),
-						g_pFullFileSystem_sym.length
-					) );
-
-				if( filesystem_ptr != nullptr )
-					filesystem = *filesystem_ptr;
-			}
-			else
-			{
-				filesystem =
-					static_cast<IFileSystem *>( factory( FILESYSTEM_INTERFACE_VERSION, nullptr ) );
-			}
-
-			auto GetNetSocket = reinterpret_cast<GetNetSocket_t>(
-				global::engine_loader.GetSymbol( GetNetSocket_sym )
-			);
-			if( GetNetSocket != nullptr )
-			{
-				netsocket_t *socket = GetNetSocket( 1 );
-				if( socket != nullptr )
-					game_socket = socket->hUDP;
-			}
-
-			if( game_socket == INVALID_SOCKET )
-			{
-				void *temp_net_sockets = reinterpret_cast<CSteamGameServerAPIContext *>( symfinder.Resolve(
-					global::engine_loader.GetModule( ),
-					net_sockets_sym.name.c_str( ),
-					net_sockets_sym.length
-				) );
-				if( temp_net_sockets != nullptr )
-				{
-					netsockets_t *net_sockets =
-
-#if defined SYSTEM_POSIX
-
-						reinterpret_cast<netsockets_t *>
-
-#else
-
-						*reinterpret_cast<netsockets_t **>
-
-#endif
-
-						( temp_net_sockets );
-					if( net_sockets != nullptr )
-						game_socket = net_sockets->Element( 1 ).hUDP;
-				}
-			}
-		}
-
+		filesystem = InterfacePointers::FileSystem( );
 		if( filesystem == nullptr )
 			LUA->ThrowError( "failed to initialize IFileSystem" );
+
+		const FunctionPointers::GMOD_GetNetSocket_t GetNetSocket = FunctionPointers::GMOD_GetNetSocket( );
+		if( GetNetSocket != nullptr )
+		{
+			const netsocket_t *net_socket = GetNetSocket( 1 );
+			if( net_socket != nullptr )
+				game_socket = net_socket->hUDP;
+		}
 
 		if( game_socket == INVALID_SOCKET )
 			LUA->ThrowError( "got an invalid server socket" );

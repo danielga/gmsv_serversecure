@@ -3,53 +3,40 @@
 
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/Lua/Helpers.hpp>
+#include <GarrysMod/FunctionPointers.hpp>
+#include <GarrysMod/InterfacePointers.hpp>
+#include <Platform.hpp>
+
+#include <scanning/symbolfinder.hpp>
+#include <detouring/classproxy.hpp>
+
+#include <networkstringtabledefs.h>
+#include <strtools.h>
+
 #include <cstdint>
 #include <cstddef>
 #include <string>
-#include <networkstringtabledefs.h>
 #include <cstring>
-#include <strtools.h>
-#include <scanning/symbolfinder.hpp>
-#include <detouring/classproxy.hpp>
-#include <Platform.hpp>
 
 namespace filecheck
 {
-	enum ValidationMode
+	enum class ValidationMode
 	{
-		ValidationModeNone,
-		ValidationModeFixed,
-		ValidationModeLua
+		None,
+		Fixed,
+		Lua
 	};
 
-	typedef bool( *CNetChan__IsValidFileForTransfer_t )( const char *filepath );
-
-#if defined SYSTEM_WINDOWS
-
-	static const std::vector<Symbol> CNetChan__IsValidFileForTransfer_syms = {
-		Symbol::FromName( "?IsValidFileForTransfer@CNetChan@@SA_NPEBD@Z" ),
-		Symbol::FromSignature( "\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x85\xDB\x0F\x84" )
-	};
-
-#elif defined SYSTEM_POSIX
-
-	static const std::vector<Symbol> CNetChan__IsValidFileForTransfer_syms = {
-		Symbol::FromName( "_ZN8CNetChan22IsValidFileForTransferEPKc" )
-	};
-
-#endif
-
-	static CNetChan__IsValidFileForTransfer_t CNetChan__IsValidFileForTransfer_original = nullptr;
 	static const char file_hook_name[] = "IsValidFileForTransfer";
 	static const char downloads_dir[] = "downloads" CORRECT_PATH_SEPARATOR_S;
-	static ValidationMode validation_mode = ValidationModeNone;
+	static ValidationMode validation_mode = ValidationMode::None;
 	static GarrysMod::Lua::ILuaInterface *lua_interface = nullptr;
 	static INetworkStringTable *downloads = nullptr;
 	static Detouring::Hook hook;
 
 	inline bool SetFileDetourStatus( ValidationMode mode )
 	{
-		if( mode != ValidationModeNone ? hook.Enable( ) : hook.Disable( ) )
+		if( mode != ValidationMode::None ? hook.Enable( ) : hook.Disable( ) )
 		{
 			validation_mode = mode;
 			return true;
@@ -63,12 +50,12 @@ namespace filecheck
 		if( LUA->Top( ) < 1 )
 			LUA->ArgError( 1, "boolean or number expected, got nil" );
 
-		ValidationMode mode = ValidationModeFixed;
-		if( LUA->IsType( 1, GarrysMod::Lua::Type::BOOL ) )
+		ValidationMode mode = ValidationMode::Fixed;
+		if( LUA->IsType( 1, GarrysMod::Lua::Type::Bool ) )
 		{
-			mode = LUA->GetBool( 1 ) ? ValidationModeFixed : ValidationModeNone;
+			mode = LUA->GetBool( 1 ) ? ValidationMode::Fixed : ValidationMode::None;
 		}
-		else if( LUA->IsType( 1, GarrysMod::Lua::Type::NUMBER ) )
+		else if( LUA->IsType( 1, GarrysMod::Lua::Type::Number ) )
 		{
 			int32_t num = static_cast<int32_t>( LUA->GetNumber( 1 ) );
 			if( num < 0 || num > 2 )
@@ -87,7 +74,7 @@ namespace filecheck
 
 	inline bool Call( const char *filepath )
 	{
-		return hook.GetTrampoline<CNetChan__IsValidFileForTransfer_t>( )( filepath );
+		return hook.GetTrampoline<FunctionPointers::CNetChan_IsValidFileForTransfer_t>( )( filepath );
 	}
 
 	inline bool BlockDownload( [[maybe_unused]] const char *filepath )
@@ -109,7 +96,7 @@ namespace filecheck
 				"[ServerSecure] Invalid file to download (path length was 0)\n"
 			);
 
-		if( validation_mode == ValidationModeLua )
+		if( validation_mode == ValidationMode::Lua )
 		{
 			if( !LuaHelpers::PushHookRun( lua_interface, file_hook_name ) )
 				return Call( filepath );
@@ -119,7 +106,7 @@ namespace filecheck
 			bool valid = true;
 			if( LuaHelpers::CallHookRun( lua_interface, 1, 1 ) )
 			{
-				if( lua_interface->IsType( -1, GarrysMod::Lua::Type::BOOL ) )
+				if( lua_interface->IsType( -1, GarrysMod::Lua::Type::Bool ) )
 					valid = lua_interface->GetBool( -1 );
 
 				lua_interface->Pop( 1 );
@@ -155,33 +142,15 @@ namespace filecheck
 	{
 		lua_interface = static_cast<GarrysMod::Lua::ILuaInterface *>( LUA );
 
-		{
-			SymbolFinder symfinder;
-
-			for( const auto &symbol : CNetChan__IsValidFileForTransfer_syms )
-			{
-				CNetChan__IsValidFileForTransfer_original =
-					reinterpret_cast<CNetChan__IsValidFileForTransfer_t>( symfinder.Resolve(
-						global::engine_loader.GetModule( ),
-						symbol.name.c_str( ),
-						symbol.length
-					) );
-				if( CNetChan__IsValidFileForTransfer_original != nullptr )
-					break;
-			}
-		}
-
-		if( CNetChan__IsValidFileForTransfer_original == nullptr )
+		const auto CNetChan_IsValidFileForTransfer = FunctionPointers::CNetChan_IsValidFileForTransfer( );
+		if( CNetChan_IsValidFileForTransfer == nullptr )
 			LUA->ThrowError( "unable to find CNetChan::IsValidFileForTransfer" );
 
-		if( !hook.Create( reinterpret_cast<void *>( CNetChan__IsValidFileForTransfer_original ),
+		if( !hook.Create( reinterpret_cast<void *>( CNetChan_IsValidFileForTransfer ),
 			reinterpret_cast<void *>( &CNetChan_IsValidFileForTransfer_detour ) ) )
 			LUA->ThrowError( "unable to create detour for CNetChan::IsValidFileForTransfer" );
 
-		INetworkStringTableContainer *networkstringtable =
-			global::engine_loader.GetInterface<INetworkStringTableContainer>(
-				INTERFACENAME_NETWORKSTRINGTABLESERVER
-			);
+		INetworkStringTableContainer *networkstringtable = InterfacePointers::NetworkStringTableContainerServer( );
 		if( networkstringtable == nullptr )
 			LUA->ThrowError( "unable to get INetworkStringTableContainer" );
 
