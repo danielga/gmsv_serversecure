@@ -1,3 +1,5 @@
+PROJECT_GENERATOR_VERSION = 2
+
 newoption({
 	trigger = "gmcommon",
 	description = "Sets the path to the garrysmod_common (https://github.com/danielga/garrysmod_common) directory",
@@ -6,7 +8,7 @@ newoption({
 
 local gmcommon = assert(_OPTIONS.gmcommon or os.getenv("GARRYSMOD_COMMON"),
 	"you didn't provide a path to your garrysmod_common (https://github.com/danielga/garrysmod_common) directory")
-include(path.join(gmcommon, "generator.v2.lua"))
+include(gmcommon)
 
 CreateWorkspace({name = "serversecure.core", abi_compatible = true})
 	CreateProject({serverside = true})
