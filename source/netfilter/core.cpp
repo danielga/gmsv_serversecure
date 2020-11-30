@@ -791,7 +791,7 @@ namespace netfilter
 
 		LUA->PushNumber( p.address.sin_addr.s_addr );
 		LUA->PushNumber( p.address.sin_port );
-		LUA->PushString( reinterpret_cast<const char *>( &p.buffer[0] ), p.buffer.size( ) );
+		LUA->PushString( reinterpret_cast<const char *>( &p.buffer[0] ), static_cast<unsigned int>( p.buffer.size( ) ) );
 		return 3;
 	}
 
