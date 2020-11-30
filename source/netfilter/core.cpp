@@ -437,13 +437,13 @@ namespace netfilter
 
 				return PacketType::Good;
 
-			case 'T': // server info request
-				return len == 25 && strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) == 0 ?
+			case 'T': // server info request (A2S_INFO)
+				return ( len == 25 || len == 1200 ) && strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) == 0 ?
 					PacketType::Info : PacketType::Invalid;
 
-			case 'U': // player info request
-			case 'V': // rules request
-				return len == 9 ? PacketType::Good : PacketType::Invalid;
+			case 'U': // player info request (A2S_PLAYER)
+			case 'V': // rules request (A2S_RULES)
+				return ( len == 9 || len == 1200 ) ? PacketType::Good : PacketType::Invalid;
 
 			case 'q': // connection handshake init
 			case 'k': // steam auth packet
@@ -791,7 +791,7 @@ namespace netfilter
 
 		LUA->PushNumber( p.address.sin_addr.s_addr );
 		LUA->PushNumber( p.address.sin_port );
-		LUA->PushString( reinterpret_cast<const char *>( &p.buffer[0] ), p.buffer.size( ) );
+		LUA->PushString( reinterpret_cast<const char *>( &p.buffer[0] ), static_cast<unsigned int>( p.buffer.size( ) ) );
 		return 3;
 	}
 
