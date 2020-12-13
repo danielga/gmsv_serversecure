@@ -8,6 +8,7 @@
 #if defined DEBUG
 
 #include <dbg.h>
+#include <Color.h>
 
 #define _DebugMsg( ... ) Msg( __VA_ARGS__ )
 #define _DebugWarning( ... ) ConColorMsg( 1, global::__yellow, __VA_ARGS__ )

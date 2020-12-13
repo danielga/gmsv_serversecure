@@ -198,6 +198,17 @@ namespace netfilter
 	static IVEngineServer *engine_server = nullptr;
 	static IFileSystem *filesystem = nullptr;
 
+	inline const char *IPToString( const in_addr &addr )
+	{
+		static char buffer[16] = { };
+		const char *str =
+			inet_ntop( AF_INET, const_cast<in_addr *>( &addr ), buffer, sizeof( buffer ) );
+		if( str == nullptr )
+			return "unknown";
+
+		return str;
+	}
+
 	static void BuildStaticReplyInfo( )
 	{
 		reply_info.game_desc = gamedll->GetGameDescription( );
@@ -348,6 +359,8 @@ namespace netfilter
 			sizeof( from )
 		);
 
+		_DebugWarning( "[ServerSecure] Handled %s info request using cache\n", IPToString( from.sin_addr ) );
+
 		return PacketType::Invalid; // we've handled it
 	}
 
@@ -355,23 +368,15 @@ namespace netfilter
 	{
 		const uint32_t time = static_cast<uint32_t>( Plat_FloatTime( ) );
 		if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
+		{
+			_DebugWarning( "[ServerSecure] Client %s hit rate limit\n", IPToString( from.sin_addr ) );
 			return PacketType::Invalid;
+		}
 
 		if( info_cache_enabled )
 			return SendInfoCache( from, time );
 
 		return PacketType::Good;
-	}
-
-	inline const char *IPToString( const in_addr &addr )
-	{
-		static char buffer[16] = { };
-		const char *str =
-			inet_ntop( AF_INET, const_cast<in_addr *>( &addr ), buffer, sizeof( buffer ) );
-		if( str == nullptr )
-			return "unknown";
-
-		return str;
 	}
 
 	static PacketType ClassifyPacket( const uint8_t *data, int32_t len, const sockaddr_in &from )
@@ -389,7 +394,7 @@ namespace netfilter
 		if( len < 5 )
 			return PacketType::Good;
 
-		int32_t channel = *reinterpret_cast<const int32_t *>( data );
+		const int32_t channel = *reinterpret_cast<const int32_t *>( data );
 		if( channel == -2 )
 		{
 			_DebugWarning(
@@ -404,7 +409,7 @@ namespace netfilter
 		if( channel != -1 )
 			return PacketType::Good;
 
-		uint8_t type = *( data + 4 );
+		const uint8_t type = *( data + 4 );
 		if( packet_validation_enabled )
 		{
 			switch( type )
@@ -438,12 +443,35 @@ namespace netfilter
 				return PacketType::Good;
 
 			case 'T': // server info request (A2S_INFO)
-				return ( len == 25 || len == 1200 ) && strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) == 0 ?
-					PacketType::Info : PacketType::Invalid;
+				if( ( len != 25 && len != 1200 ) || strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) != 0 )
+				{
+					_DebugWarning(
+						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
+						len,
+						channel,
+						type,
+						IPToString( from.sin_addr )
+					);
+					return PacketType::Invalid;
+				}
+
+				return PacketType::Info;
 
 			case 'U': // player info request (A2S_PLAYER)
 			case 'V': // rules request (A2S_RULES)
-				return ( len == 9 || len == 1200 ) ? PacketType::Good : PacketType::Invalid;
+				if( len != 9 && len != 1200 )
+				{
+					_DebugWarning(
+						"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
+						len,
+						channel,
+						type,
+						IPToString( from.sin_addr )
+					);
+					return PacketType::Invalid;
+				}
+
+				return PacketType::Good;
 
 			case 'q': // connection handshake init
 			case 'k': // steam auth packet
@@ -560,6 +588,7 @@ namespace netfilter
 			return -1;
 
 		const ssize_t len = trampoline( s, buf, buflen, flags, from, fromlen );
+		_DebugWarning( "[ServerSecure] Called recvfrom on socket %d and received %d bytes\n", s, len );
 		if( len == -1 )
 			return -1;
 
@@ -577,6 +606,8 @@ namespace netfilter
 		const sockaddr_in &infrom = *reinterpret_cast<sockaddr_in *>( from );
 		if( !IsAddressAllowed( infrom ) )
 			return -1;
+
+		_DebugWarning( "[ServerSecure] Address %s was allowed\n", IPToString( infrom.sin_addr ) );
 
 		PacketType type = ClassifyPacket( buffer, len, infrom );
 		if( type == PacketType::Info )
@@ -596,9 +627,12 @@ namespace netfilter
 	{
 		if( s != game_socket )
 		{
+			_DebugWarning( "[ServerSecure] recvfrom detour called with socket %d, passing through\n", s );
 			auto trampoline = recvfrom_hook.GetTrampoline<recvfrom_t>( );
 			return trampoline != nullptr ? trampoline( s, buf, buflen, flags, from, fromlen ) : -1;
 		}
+
+		_DebugWarning( "[ServerSecure] recvfrom detour called with socket %d, detouring\n", s );
 		
 		packet_t p;
 		const bool has_packet = PopPacketFromQueue( p );
@@ -622,6 +656,7 @@ namespace netfilter
 		{
 			if( IsPacketQueueFull( ) )
 			{
+				_DebugWarning( "[ServerSecure] Packet queue is full, sleeping for 100ms\n" );
 				ThreadSleep( 100 );
 				continue;
 			}
@@ -633,6 +668,8 @@ namespace netfilter
 			const int32_t res = select( game_socket + 1, &readables, nullptr, nullptr, &timeout );
 			if( res == -1 || !FD_ISSET( game_socket, &readables ) )
 				continue;
+
+			_DebugWarning( "[ServerSecure] Select passed\n" );
 
 			packet_t p;
 			p.buffer.resize( threaded_socket_max_buffer );
@@ -646,6 +683,8 @@ namespace netfilter
 			);
 			if( len == -1 )
 				continue;
+
+			_DebugWarning( "[ServerSecure] Pushing packet to queue\n" );
 
 			p.buffer.resize( static_cast<size_t>( len ) );
 
