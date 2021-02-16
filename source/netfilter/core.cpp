@@ -234,10 +234,10 @@ namespace netfilter
 			reply_info.tags = " gm:";
 			reply_info.tags += gamemode.name;
 
-			if( !gamemode.workshopid.empty( ) )
+			if( !gamemode.workshopid )
 			{
 				reply_info.tags += " gmws:";
-				reply_info.tags += gamemode.workshopid;
+				reply_info.tags += std::to_string( gamemode.workshopid );
 			}
 		}
 
