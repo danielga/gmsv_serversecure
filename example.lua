@@ -1,4 +1,4 @@
-require("serversecure")
+require("serversecure.core")
 
 --serversecure.EnableFirewallWhitelist(boolean) -- enable "firewall" whitelist, any client not in the whitelist doesn't see the server
 --serversecure.AddWhitelistIP(ip_in_integer_format) -- add an IP to the whitelist
