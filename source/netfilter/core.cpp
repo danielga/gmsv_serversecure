@@ -34,6 +34,7 @@
 #include <Ws2tcpip.h>
 
 #include <unordered_set>
+#include <unordered_map>
 #include <atomic>
 
 typedef int32_t ssize_t;
@@ -108,7 +109,7 @@ namespace netfilter
 		std::string game_desc;
 		int32_t max_clients = 0;
 		int32_t udp_port = 0;
-		std::string tags;
+		std::unordered_map<std::string, std::string> tags;
 	};
 
 	enum class PacketType
@@ -137,6 +138,7 @@ namespace netfilter
 
 	static SourceSDK::FactoryLoader icvar_loader( "vstdlib" );
 	static ConVar *sv_visiblemaxplayers = nullptr;
+	static ConVar *sv_location = nullptr;
 
 	static SourceSDK::ModuleLoader dedicated_loader( "dedicated" );
 	static SourceSDK::FactoryLoader server_loader( "server" );
@@ -178,7 +180,7 @@ namespace netfilter
 	static std::queue<packet_t> threaded_socket_queue;
 	static CThreadFastMutex threaded_socket_mutex;
 
-	static constexpr char default_game_version[] = "2019.11.12";
+	static constexpr char default_game_version[] = "2020.10.14";
 	static constexpr uint8_t default_proto_version = 17;
 	static bool info_cache_enabled = false;
 	static reply_info_t reply_info;
@@ -209,7 +211,7 @@ namespace netfilter
 		return str;
 	}
 
-	static void BuildStaticReplyInfo( )
+	static void BuildStaticReplyInfo( const char *game_version )
 	{
 		reply_info.game_desc = gamedll->GetGameDescription( );
 
@@ -228,17 +230,21 @@ namespace netfilter
 		reply_info.udp_port = global::server->GetUDPPort( );
 
 		{
+			reply_info.tags.clear( );
+
 			const IGamemodeSystem::Information &gamemode =
 				static_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( )->Active( );
 
-			reply_info.tags = " gm:";
-			reply_info.tags += gamemode.name;
+			reply_info.tags["gm"] = gamemode.name;
 
-			if( !gamemode.workshopid )
-			{
-				reply_info.tags += " gmws:";
-				reply_info.tags += std::to_string( gamemode.workshopid );
-			}
+			if( gamemode.workshopid != 0 )
+				reply_info.tags["gmws"] = std::to_string( gamemode.workshopid );
+
+			if( !gamemode.category.empty( ) )
+				reply_info.tags["gmc"] = gamemode.category;
+
+			if( game_version != nullptr )
+				reply_info.tags["ver"] = game_version;
 		}
 
 		{
@@ -266,6 +272,22 @@ namespace netfilter
 			if( pos != reply_info.game_version.npos )
 				reply_info.game_version.erase( pos );
 		}
+	}
+
+	static std::string ConcatenateTags( const std::unordered_map<std::string, std::string> &tags )
+	{
+		std::string strtags;
+		for( const auto &tag : tags )
+		{
+			if( !strtags.empty( ) )
+				strtags += ' ';
+
+			strtags += tag.first;
+			strtags += ':';
+			strtags += tag.second;
+		}
+
+		return strtags;
 	}
 
 	static void BuildReplyInfo( )
@@ -309,8 +331,11 @@ namespace netfilter
 		const CSteamID *sid = engine_server->GetGameServerSteamID( );
 		const uint64_t steamid = sid != nullptr ? sid->ConvertToUint64( ) : 0;
 
+		if( sv_location != nullptr )
+			reply_info.tags["loc"] = sv_location->GetString( );
+
 		const bool has_tags = !reply_info.tags.empty( );
-		const char *tags = has_tags ? reply_info.tags.c_str( ) : nullptr;
+		const std::string tags = has_tags ? ConcatenateTags( reply_info.tags ) : std::string( );
 
 		info_cache_packet.Reset( );
 
@@ -338,7 +363,7 @@ namespace netfilter
 		info_cache_packet.WriteShort( udp_port );
 		info_cache_packet.WriteLongLong( steamid );
 		if( has_tags )
-			info_cache_packet.WriteString( tags );
+			info_cache_packet.WriteString( tags.c_str( ) );
 		info_cache_packet.WriteLongLong( appid );
 	}
 
@@ -773,7 +798,7 @@ namespace netfilter
 
 	LUA_FUNCTION_STATIC( RefreshInfoCache )
 	{
-		BuildStaticReplyInfo( );
+		BuildStaticReplyInfo( nullptr );
 		BuildReplyInfo( );
 		return 0;
 	}
@@ -839,9 +864,14 @@ namespace netfilter
 		if( !server_loader.IsValid( ) )
 			LUA->ThrowError( "unable to get server factory" );
 
-		ICvar *icvar = InterfacePointers::Cvar( );
-		if( icvar != nullptr )
-			sv_visiblemaxplayers = icvar->FindVar( "sv_visiblemaxplayers" );
+		{
+			ICvar *icvar = InterfacePointers::Cvar( );
+			if( icvar != nullptr )
+			{
+				sv_visiblemaxplayers = icvar->FindVar( "sv_visiblemaxplayers" );
+				sv_location = icvar->FindVar( "sv_location" );
+			}
+		}
 
 		gamedll = InterfacePointers::ServerGameDLL( );
 		if( gamedll == nullptr )
@@ -855,12 +885,14 @@ namespace netfilter
 		if( filesystem == nullptr )
 			LUA->ThrowError( "failed to initialize IFileSystem" );
 
-		const FunctionPointers::GMOD_GetNetSocket_t GetNetSocket = FunctionPointers::GMOD_GetNetSocket( );
-		if( GetNetSocket != nullptr )
 		{
-			const netsocket_t *net_socket = GetNetSocket( 1 );
-			if( net_socket != nullptr )
-				game_socket = net_socket->hUDP;
+			const FunctionPointers::GMOD_GetNetSocket_t GetNetSocket = FunctionPointers::GMOD_GetNetSocket( );
+			if( GetNetSocket != nullptr )
+			{
+				const netsocket_t *net_socket = GetNetSocket( 1 );
+				if( net_socket != nullptr )
+					game_socket = net_socket->hUDP;
+			}
 		}
 
 		if( game_socket == INVALID_SOCKET )
@@ -874,7 +906,12 @@ namespace netfilter
 		if( threaded_socket_handle == nullptr )
 			LUA->ThrowError( "unable to create thread" );
 
-		BuildStaticReplyInfo( );
+		{
+			LUA->GetField( GarrysMod::Lua::INDEX_GLOBAL, "VERSION" );
+			const char *game_version = LUA->CheckString( -1 );
+			BuildStaticReplyInfo( game_version );
+			LUA->Pop( 1 );
+		}
 
 		LUA->PushCFunction( EnableFirewallWhitelist );
 		LUA->SetField( -2, "EnableFirewallWhitelist" );
