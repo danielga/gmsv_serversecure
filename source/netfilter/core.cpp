@@ -23,6 +23,7 @@
 #include <cstring>
 #include <queue>
 #include <string>
+#include <unordered_map>
 
 #if defined SYSTEM_WINDOWS
 
@@ -34,7 +35,6 @@
 #include <Ws2tcpip.h>
 
 #include <unordered_set>
-#include <unordered_map>
 #include <atomic>
 
 typedef int32_t ssize_t;

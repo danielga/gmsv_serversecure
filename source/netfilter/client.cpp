@@ -4,12 +4,12 @@
 
 namespace netfilter
 {
-	Client::Client( ClientManager &manager, uint32_t address ) :
-		manager( manager ), address( address ), last_reset( 0 ), count( 0 )
+	Client::Client( ClientManager &_manager, uint32_t _address ) :
+		manager( _manager ), address( _address ), last_reset( 0 ), count( 0 )
 	{ }
 
-	Client::Client( ClientManager &manager, uint32_t address, uint32_t time ) :
-		manager( manager ), address( address ), last_reset( time ), count( 1 )
+	Client::Client( ClientManager &_manager, uint32_t _address, uint32_t time ) :
+		manager( _manager ), address( _address ), last_reset( time ), count( 1 )
 	{ }
 
 	bool Client::CheckIPRate( uint32_t time )
