@@ -23,7 +23,6 @@
 #include <cstring>
 #include <queue>
 #include <string>
-#include <unordered_map>
 
 #if defined SYSTEM_WINDOWS
 
@@ -102,6 +101,15 @@ namespace netfilter
 		std::vector<uint8_t> buffer;
 	};
 
+	struct server_tags_t
+	{
+		std::string gm;
+		std::string gmws;
+		std::string gmc;
+		std::string loc;
+		std::string ver;
+	};
+
 	struct reply_info_t
 	{
 		std::string game_dir;
@@ -109,7 +117,7 @@ namespace netfilter
 		std::string game_desc;
 		int32_t max_clients = 0;
 		int32_t udp_port = 0;
-		std::unordered_map<std::string, std::string> tags;
+		server_tags_t tags;
 	};
 
 	enum class PacketType
@@ -230,21 +238,26 @@ namespace netfilter
 		reply_info.udp_port = global::server->GetUDPPort( );
 
 		{
-			reply_info.tags.clear( );
-
 			const IGamemodeSystem::Information &gamemode =
 				static_cast<CFileSystem_Stdio *>( filesystem )->Gamemodes( )->Active( );
 
-			reply_info.tags["gm"] = gamemode.name;
+			if( !gamemode.name.empty( ) )
+				reply_info.tags.gm = gamemode.name;
+			else
+				reply_info.tags.gm.clear( );
 
 			if( gamemode.workshopid != 0 )
-				reply_info.tags["gmws"] = std::to_string( gamemode.workshopid );
+				reply_info.tags.gmws = std::to_string( gamemode.workshopid );
+			else
+				reply_info.tags.gmws.clear( );
 
 			if( !gamemode.category.empty( ) )
-				reply_info.tags["gmc"] = gamemode.category;
+				reply_info.tags.gmc = gamemode.category;
+			else
+				reply_info.tags.gmc.clear( );
 
 			if( game_version != nullptr )
-				reply_info.tags["ver"] = game_version;
+				reply_info.tags.ver = game_version;
 		}
 
 		{
@@ -274,17 +287,38 @@ namespace netfilter
 		}
 	}
 
-	static std::string ConcatenateTags( const std::unordered_map<std::string, std::string> &tags )
+	static std::string ConcatenateTags( const server_tags_t &tags )
 	{
 		std::string strtags;
-		for( const auto &tag : tags )
-		{
-			if( !strtags.empty( ) )
-				strtags += ' ';
 
-			strtags += tag.first;
-			strtags += ':';
-			strtags += tag.second;
+		if( !tags.gm.empty( ) )
+		{
+			strtags += "gm:";
+			strtags += tags.gm;
+		}
+
+		if( !tags.gmws.empty( ) )
+		{
+			strtags += strtags.empty( ) ? "gmws:" : " gmws:";
+			strtags += tags.gmws;
+		}
+
+		if( !tags.gmc.empty( ) )
+		{
+			strtags += strtags.empty( ) ? "gmc:" : " gmc:";
+			strtags += tags.gmc;
+		}
+
+		if( !tags.loc.empty( ) )
+		{
+			strtags += strtags.empty( ) ? "loc:" : " loc:";
+			strtags += tags.loc;
+		}
+
+		if( !tags.ver.empty( ) )
+		{
+			strtags += strtags.empty( ) ? "ver:" : " ver:";
+			strtags += tags.ver;
 		}
 
 		return strtags;
@@ -332,10 +366,12 @@ namespace netfilter
 		const uint64_t steamid = sid != nullptr ? sid->ConvertToUint64( ) : 0;
 
 		if( sv_location != nullptr )
-			reply_info.tags["loc"] = sv_location->GetString( );
+			reply_info.tags.loc = sv_location->GetString( );
+		else
+			reply_info.tags.loc.clear( );
 
-		const bool has_tags = !reply_info.tags.empty( );
-		const std::string tags = has_tags ? ConcatenateTags( reply_info.tags ) : std::string( );
+		const std::string tags = ConcatenateTags( reply_info.tags );
+		const bool has_tags = !tags.empty( );
 
 		info_cache_packet.Reset( );
 
