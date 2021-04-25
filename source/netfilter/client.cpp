@@ -17,6 +17,7 @@ namespace netfilter
 		if( time - last_reset >= manager.GetMaxQueriesWindow( ) )
 		{
 			last_reset = time;
+			count = 1;
 		}
 		else
 		{
@@ -44,6 +45,6 @@ namespace netfilter
 
 	bool Client::TimedOut( uint32_t time ) const
 	{
-		return last_reset - time >= ClientManager::ClientTimeout;
+		return time - last_reset >= ClientManager::ClientTimeout;
 	}
 }
