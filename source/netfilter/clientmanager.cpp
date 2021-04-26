@@ -18,6 +18,27 @@ namespace netfilter
 		if( !enabled )
 			return true;
 
+		if( time - global_last_reset >= max_window )
+		{
+			global_last_reset = time;
+			global_count = 1;
+		}
+		else
+		{
+			++global_count;
+			if( global_count / max_window >= global_max_sec )
+			{
+				_DebugWarning(
+					"[ServerSecure] %d.%d.%d.%d reached the global query limit!\n",
+					( from >> 24 ) & 0xFF,
+					( from >> 16 ) & 0xFF,
+					( from >> 8 ) & 0xFF,
+					from & 0xFF
+				);
+				return false;
+			}
+		}
+
 		if( clients.size( ) >= MaxClients )
 			for( auto it = clients.begin( ); it != clients.end( ); ++it )
 			{
@@ -40,27 +61,6 @@ namespace netfilter
 		}
 		else
 			clients.insert( std::make_pair( from, Client( *this, from, time ) ) );
-
-		if( time - global_last_reset >= max_window )
-		{
-			global_last_reset = time;
-			global_count = 1;
-		}
-		else
-		{
-			++global_count;
-			if( global_count / max_window >= global_max_sec )
-			{
-				_DebugWarning(
-					"[ServerSecure] %d.%d.%d.%d reached the global query limit!\n",
-					( from >> 24 ) & 0xFF,
-					( from >> 16 ) & 0xFF,
-					( from >> 8 ) & 0xFF,
-					from & 0xFF
-				);
-				return false;
-			}
-		}
 
 		return true;
 	}
