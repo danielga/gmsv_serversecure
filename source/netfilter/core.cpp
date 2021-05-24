@@ -167,7 +167,7 @@ namespace netfilter
 
 #else
 
-	static Detouring::Hook recvfrom_hook( "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
+	static Detouring::Hook recvfrom_hook( "libc", "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
 
 #endif
 
