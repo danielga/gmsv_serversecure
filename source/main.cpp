@@ -27,11 +27,11 @@ namespace global
 
 		LUA->CreateTable( );
 
-		LUA->PushString( "serversecure 1.5.35" );
+		LUA->PushString( "serversecure 1.5.36" );
 		LUA->SetField( -2, "Version" );
 
 		// version num follows LuaJIT style, xxyyzz
-		LUA->PushNumber( 10535 );
+		LUA->PushNumber( 10536 );
 		LUA->SetField( -2, "VersionNum" );
 
 		LUA->PushCFunction( GetClientCount );
