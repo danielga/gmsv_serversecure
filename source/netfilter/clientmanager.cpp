@@ -41,7 +41,7 @@ namespace netfilter
 		else
 			clients.insert( std::make_pair( from, Client( *this, from, time ) ) );
 
-		if( time - global_last_reset > max_window )
+		if( time - global_last_reset >= max_window )
 		{
 			global_last_reset = time;
 			global_count = 1;
