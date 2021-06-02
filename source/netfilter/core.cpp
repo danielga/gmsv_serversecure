@@ -1014,6 +1014,6 @@ namespace netfilter
 			threaded_socket_handle = nullptr;
 		}
 
-		recvfrom_hook.Destroy( );
+		recvfrom_hook.Disable( );
 	}
 }
