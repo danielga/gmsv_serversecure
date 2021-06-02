@@ -167,7 +167,7 @@ namespace netfilter
 
 #else
 
-	static Detouring::Hook recvfrom_hook( "libc", "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
+	static Detouring::Hook recvfrom_hook( "recvfrom", reinterpret_cast<void *>( recvfrom_detour ) );
 
 #endif
 
@@ -700,11 +700,11 @@ namespace netfilter
 		if( !has_packet )
 			return HandleNetError( -1 );
 
-		const ssize_t len = std::min( static_cast<ssize_t>( p.buffer.size( ) ), static_cast<ssize_t>( buflen ) );
+		const ssize_t len = (std::min)( static_cast<ssize_t>( p.buffer.size( ) ), static_cast<ssize_t>( buflen ) );
 		p.buffer.resize( static_cast<size_t>( len ) );
 		std::copy( p.buffer.begin( ), p.buffer.end( ), static_cast<uint8_t *>( buf ) );
 
-		const socklen_t addrlen = std::min( *fromlen, p.address_size );
+		const socklen_t addrlen = (std::min)( *fromlen, p.address_size );
 		std::memcpy( from, &p.address, static_cast<size_t>( addrlen ) );
 		*fromlen = addrlen;
 
