@@ -907,6 +907,12 @@ namespace netfilter
 				sv_visiblemaxplayers = icvar->FindVar( "sv_visiblemaxplayers" );
 				sv_location = icvar->FindVar( "sv_location" );
 			}
+
+			if( sv_visiblemaxplayers == nullptr )
+				ConColorMsg( Color( 255, 255, 0, 255 ), "[ServerSecure] Failed to get \"sv_visiblemaxplayers\" convar!\n" );
+
+			if( sv_location == nullptr )
+				ConColorMsg( Color( 255, 255, 0, 255 ), "[ServerSecure] Failed to get \"sv_location\" convar!\n" );
 		}
 
 		gamedll = InterfacePointers::ServerGameDLL( );
