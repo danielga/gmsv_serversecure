@@ -27,6 +27,7 @@
 #include <queue>
 #include <string>
 #include <array>
+#include <random>
 
 #if defined SYSTEM_WINDOWS
 
@@ -914,6 +915,8 @@ namespace netfilter
 		typedef CBaseServer TargetClass;
 		typedef CBaseServerProxy SubstituteClass;
 
+		CBaseServerProxy( ) = default;
+
 	public:
 		virtual bool CheckChallengeNr( netadr_t &adr, int nChallengeValue )
 		{
@@ -974,14 +977,13 @@ namespace netfilter
 			m_challenge_gen_time = current_time;
 			m_previous_challenge.swap( m_challenge );
 
-			// RandomInt maps a uniform distribution on the interval [0,INT_MAX].
-			// RandomInt will always return the minimum value if the difference in min and max is greater than or equal to INT_MAX.
-			m_challenge[0] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
-			m_challenge[1] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
-			m_challenge[2] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
-			m_challenge[3] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
+			m_challenge[0] = m_rng( );
+			m_challenge[1] = m_rng( );
+			m_challenge[2] = m_rng( );
+			m_challenge[3] = m_rng( );
 		}
 
+		static std::mt19937 m_rng;
 		static double m_challenge_gen_time;
 		static std::array<uint32_t, 5> m_previous_challenge;
 		static std::array<uint32_t, 5> m_challenge;
@@ -989,6 +991,7 @@ namespace netfilter
 		static CBaseServerProxy Singleton;
 	};
 
+	std::mt19937 CBaseServerProxy::m_rng( std::random_device { } ( ) );
 	double CBaseServerProxy::m_challenge_gen_time = -1;
 	std::array<uint32_t, 5> CBaseServerProxy::m_previous_challenge;
 	std::array<uint32_t, 5> CBaseServerProxy::m_challenge;
