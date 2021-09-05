@@ -26,6 +26,7 @@
 #include <cstring>
 #include <queue>
 #include <string>
+#include <array>
 
 #if defined SYSTEM_WINDOWS
 
@@ -216,6 +217,8 @@ namespace netfilter
 	static constexpr int32_t PROTOCOL_HASHEDCDKEY = 0x02; // Connection from client is using hashed CD key because WON comm. channel was unreachable
 	static constexpr int32_t PROTOCOL_STEAM = 0x03; // Steam certificates
 	static constexpr int32_t PROTOCOL_LASTVALID = 0x03; // Last valid protocol
+
+	static constexpr int32_t MAX_RANDOM_RANGE = 0x7FFFFFFFUL;
 
 	inline const char *IPToString( const in_addr &addr )
 	{
@@ -914,8 +917,6 @@ namespace netfilter
 	public:
 		virtual bool CheckChallengeNr( netadr_t &adr, int nChallengeValue )
 		{
-			TargetClass *self = This( );
-
 			// See if the challenge is valid
 			// Don't care if it is a local address.
 			if( adr.IsLoopback( ) )
@@ -925,9 +926,12 @@ namespace netfilter
 			if( IsX360( ) )
 				return true;
 
-			uint64 challenge = ( static_cast<uint64>( adr.GetIPNetworkByteOrder( ) ) << 32 ) + self->m_CurrentRandomNonce;
+			UpdateChallengeIfNeeded( );
+
+			m_challenge[4] = adr.GetIPNetworkByteOrder( );
+
 			CSHA1 hasher;
-			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Update( reinterpret_cast<uint8_t *>( &m_challenge[0] ), sizeof( uint32_t ) * m_challenge.size( ) );
 			hasher.Final( );
 			SHADigest_t hash = { 0 };
 			hasher.GetHash( hash );
@@ -935,10 +939,10 @@ namespace netfilter
 				return true;
 
 			// try with the old random nonce
-			challenge &= 0xffffffff00000000ull;
-			challenge += self->m_LastRandomNonce;
+			m_previous_challenge[4] = adr.GetIPNetworkByteOrder( );
+
 			hasher.Reset( );
-			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Update( reinterpret_cast<uint8_t *>( &m_previous_challenge[0] ), sizeof( uint32_t ) * m_previous_challenge.size( ) );
 			hasher.Final( );
 			hasher.GetHash( hash );
 			if( reinterpret_cast<int *>( hash )[0] == nChallengeValue )
@@ -949,18 +953,45 @@ namespace netfilter
 
 		virtual int GetChallengeNr( netadr_t &adr )
 		{
-			TargetClass *self = This( );
-			uint64 challenge = ( static_cast<uint64>( adr.GetIPNetworkByteOrder( ) ) << 32 ) + self->m_CurrentRandomNonce;
+			UpdateChallengeIfNeeded( );
+
+			m_challenge[4] = adr.GetIPNetworkByteOrder( );
+
 			CSHA1 hasher;
-			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Update( reinterpret_cast<uint8_t *>( &m_challenge[0] ), sizeof( uint32_t ) * m_challenge.size( ) );
 			hasher.Final( );
 			SHADigest_t hash = { 0 };
 			hasher.GetHash( hash );
 			return reinterpret_cast<int *>( hash )[0];
 		}
 
+		void UpdateChallengeIfNeeded( )
+		{
+			const double current_time = Plat_FloatTime( );
+			if( m_challenge_gen_time >= 0 && current_time < m_challenge_gen_time + CHALLENGE_NONCE_LIFETIME )
+				return;
+
+			m_challenge_gen_time = current_time;
+			m_previous_challenge.swap( m_challenge );
+
+			// RandomInt maps a uniform distribution on the interval [0,INT_MAX].
+			// RandomInt will always return the minimum value if the difference in min and max is greater than or equal to INT_MAX.
+			m_challenge[0] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
+			m_challenge[1] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
+			m_challenge[2] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
+			m_challenge[3] = static_cast<uint32>( RandomInt( 0, MAX_RANDOM_RANGE ) );
+		}
+
+		static double m_challenge_gen_time;
+		static std::array<uint32_t, 5> m_previous_challenge;
+		static std::array<uint32_t, 5> m_challenge;
+
 		static CBaseServerProxy Singleton;
 	};
+
+	double CBaseServerProxy::m_challenge_gen_time = -1;
+	std::array<uint32_t, 5> CBaseServerProxy::m_previous_challenge;
+	std::array<uint32_t, 5> CBaseServerProxy::m_challenge;
 
 	CBaseServerProxy CBaseServerProxy::Singleton;
 

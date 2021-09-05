@@ -27,7 +27,7 @@ enum server_state_t
 };
 
 // time a challenge nonce is valid for, in seconds
-#define CHALLENGE_NONCE_LIFETIME 6.0f
+#define CHALLENGE_NONCE_LIFETIME 6
 
 class CBaseServer : public IServer
 {
