@@ -1,6 +1,7 @@
 #include "core.hpp"
 #include "clientmanager.hpp"
 #include "main.hpp"
+#include "baseserver.h"
 
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/InterfacePointers.hpp>
@@ -8,6 +9,7 @@
 #include <Platform.hpp>
 
 #include <detouring/hook.hpp>
+#include <detouring/classproxy.hpp>
 
 #include <eiface.h>
 #include <filesystem_stdio.h>
@@ -17,6 +19,7 @@
 #include <bitbuf.h>
 #include <steam/steam_gameserver.h>
 #include <game/server/iplayerinfo.h>
+#include <checksum_sha1.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -76,8 +79,6 @@ typedef size_t recvlen_t;
 static const SOCKET INVALID_SOCKET = -1;
 
 #endif
-
-class CBaseServer;
 
 struct netsocket_t
 {
@@ -207,6 +208,14 @@ namespace netfilter
 	static IServerGameDLL *gamedll = nullptr;
 	static IVEngineServer *engine_server = nullptr;
 	static IFileSystem *filesystem = nullptr;
+
+	// max size needed to contain a steam authentication key (both server and client)
+	static constexpr size_t STEAM_KEYSIZE = 2048;
+
+	static constexpr int32_t PROTOCOL_AUTHCERTIFICATE = 0x01; // Connection from client is using a WON authenticated certificate
+	static constexpr int32_t PROTOCOL_HASHEDCDKEY = 0x02; // Connection from client is using hashed CD key because WON comm. channel was unreachable
+	static constexpr int32_t PROTOCOL_STEAM = 0x03; // Steam certificates
+	static constexpr int32_t PROTOCOL_LASTVALID = 0x03; // Last valid protocol
 
 	inline const char *IPToString( const in_addr &addr )
 	{
@@ -455,7 +464,8 @@ namespace netfilter
 		if( len < 5 )
 			return PacketType::Good;
 
-		const int32_t channel = *reinterpret_cast<const int32_t *>( data );
+		bf_read packet( data, len );
+		const int32_t channel = static_cast<int32_t>( packet.ReadLong( ) );
 		if( channel == -2 )
 		{
 			_DebugWarning(
@@ -470,7 +480,7 @@ namespace netfilter
 		if( channel != -1 )
 			return PacketType::Good;
 
-		const uint8_t type = *( data + 4 );
+		const uint8_t type = static_cast<uint8_t>( packet.ReadByte( ) );
 		if( packet_validation_enabled )
 		{
 			switch( type )
@@ -895,6 +905,65 @@ namespace netfilter
 		return 3;
 	}
 
+	class CBaseServerProxy : public Detouring::ClassProxy<CBaseServer, CBaseServerProxy>
+	{
+	private:
+		typedef CBaseServer TargetClass;
+		typedef CBaseServerProxy SubstituteClass;
+
+	public:
+		virtual bool CheckChallengeNr( netadr_t &adr, int nChallengeValue )
+		{
+			TargetClass *self = This( );
+
+			// See if the challenge is valid
+			// Don't care if it is a local address.
+			if( adr.IsLoopback( ) )
+				return true;
+
+			// X360TBD: network
+			if( IsX360( ) )
+				return true;
+
+			uint64 challenge = ( static_cast<uint64>( adr.GetIPNetworkByteOrder( ) ) << 32 ) + self->m_CurrentRandomNonce;
+			CSHA1 hasher;
+			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Final( );
+			SHADigest_t hash = { 0 };
+			hasher.GetHash( hash );
+			if( reinterpret_cast<int *>( hash )[0] == nChallengeValue )
+				return true;
+
+			// try with the old random nonce
+			challenge &= 0xffffffff00000000ull;
+			challenge += self->m_LastRandomNonce;
+			hasher.Reset( );
+			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Final( );
+			hasher.GetHash( hash );
+			if( reinterpret_cast<int *>( hash )[0] == nChallengeValue )
+				return true;
+
+			return false;
+		}
+
+		virtual int GetChallengeNr( netadr_t &adr )
+		{
+			TargetClass *self = This( );
+			uint64 challenge = ( static_cast<uint64>( adr.GetIPNetworkByteOrder( ) ) << 32 ) + self->m_CurrentRandomNonce;
+			CSHA1 hasher;
+			hasher.Update( reinterpret_cast<uint8_t *>( &challenge ), sizeof( challenge ) );
+			hasher.Final( );
+			SHADigest_t hash = { 0 };
+			hasher.GetHash( hash );
+			return reinterpret_cast<int *>( hash )[0];
+		}
+
+		static CBaseServerProxy Singleton;
+	};
+
+	CBaseServerProxy CBaseServerProxy::Singleton;
+
 	void Initialize( GarrysMod::Lua::ILuaBase *LUA )
 	{
 		if( !server_loader.IsValid( ) )
@@ -926,6 +995,14 @@ namespace netfilter
 		filesystem = InterfacePointers::FileSystem( );
 		if( filesystem == nullptr )
 			LUA->ThrowError( "failed to initialize IFileSystem" );
+
+		CBaseServer *baseserver = static_cast<CBaseServer *>( InterfacePointers::Server( ) );
+		if( baseserver != nullptr )
+		{
+			CBaseServerProxy::Singleton.Initialize( baseserver );
+			CBaseServerProxy::Singleton.Hook( &CBaseServer::CheckChallengeNr, &CBaseServerProxy::CheckChallengeNr );
+			CBaseServerProxy::Singleton.Hook( &CBaseServer::GetChallengeNr, &CBaseServerProxy::GetChallengeNr );
+		}
 
 		{
 			const FunctionPointers::GMOD_GetNetSocket_t GetNetSocket = FunctionPointers::GMOD_GetNetSocket( );
