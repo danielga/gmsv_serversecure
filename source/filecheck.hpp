@@ -11,5 +11,5 @@ namespace GarrysMod
 namespace filecheck
 {
 	void Initialize( GarrysMod::Lua::ILuaBase *LUA );
-	void Deinitialize( GarrysMod::Lua::ILuaBase *LUA );
+	void Deinitialize( );
 }
