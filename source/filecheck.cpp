@@ -1,5 +1,5 @@
 #include "filecheck.hpp"
-#include "main.hpp"
+#include "debug.hpp"
 
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/Lua/Helpers.hpp>
@@ -162,7 +162,7 @@ namespace filecheck
 		LUA->SetField( -2, "EnableFileValidation" );
 	}
 
-	void Deinitialize( GarrysMod::Lua::ILuaBase * )
+	void Deinitialize( )
 	{
 		hook.Destroy( );
 	}

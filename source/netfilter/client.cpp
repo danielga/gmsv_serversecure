@@ -1,6 +1,6 @@
 #include "client.hpp"
 #include "clientmanager.hpp"
-#include "main.hpp"
+#include "debug.hpp"
 
 namespace netfilter
 {

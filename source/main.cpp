@@ -1,4 +1,3 @@
-#include "main.hpp"
 #include "netfilter/core.hpp"
 #include "filecheck.hpp"
 
@@ -10,8 +9,7 @@
 
 namespace global
 {
-	SourceSDK::FactoryLoader engine_loader( "engine" );
-	IServer *server = nullptr;
+	static IServer *server = nullptr;
 
 	LUA_FUNCTION_STATIC( GetClientCount )
 	{
@@ -27,11 +25,11 @@ namespace global
 
 		LUA->CreateTable( );
 
-		LUA->PushString( "serversecure 1.5.37" );
+		LUA->PushString( "serversecure 1.5.38" );
 		LUA->SetField( -2, "Version" );
 
 		// version num follows LuaJIT style, xxyyzz
-		LUA->PushNumber( 10537 );
+		LUA->PushNumber( 10538 );
 		LUA->SetField( -2, "VersionNum" );
 
 		LUA->PushCFunction( GetClientCount );
@@ -61,8 +59,8 @@ GMOD_MODULE_OPEN( )
 
 GMOD_MODULE_CLOSE( )
 {
-	filecheck::Deinitialize( LUA );
-	netfilter::Deinitialize( LUA );
+	filecheck::Deinitialize( );
+	netfilter::Deinitialize( );
 	global::Deinitialize( LUA );
 	return 0;
 }

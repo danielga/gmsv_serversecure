@@ -1,5 +1,5 @@
 #include "clientmanager.hpp"
-#include "main.hpp"
+#include "debug.hpp"
 
 namespace netfilter
 {
