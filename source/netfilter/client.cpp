@@ -1,6 +1,7 @@
 #include "client.hpp"
 #include "clientmanager.hpp"
-#include "debug.hpp"
+
+#include <dbg.h>
 
 namespace netfilter
 {
@@ -24,7 +25,7 @@ namespace netfilter
 			++count;
 			if( count / manager.GetMaxQueriesWindow( ) >= manager.GetMaxQueriesPerSecond( ) )
 			{
-				_DebugWarning(
+				DevWarning(
 					"[ServerSecure] %d.%d.%d.%d reached its query limit!\n",
 					( address >> 24 ) & 0xFF,
 					( address >> 16 ) & 0xFF,

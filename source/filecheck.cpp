@@ -1,5 +1,4 @@
 #include "filecheck.hpp"
-#include "debug.hpp"
 
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/Lua/Helpers.hpp>
@@ -12,6 +11,7 @@
 
 #include <networkstringtabledefs.h>
 #include <strtools.h>
+#include <dbg.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -79,7 +79,7 @@ namespace filecheck
 
 	inline bool BlockDownload( [[maybe_unused]] const char *filepath )
 	{
-		_DebugWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
+		DevWarning( "[ServerSecure] Blocking download of \"%s\"\n", filepath );
 		return false;
 	}
 
@@ -121,7 +121,7 @@ namespace filecheck
 		nicefile.resize( std::strlen( nicefile.c_str( ) ) );
 		filepath = nicefile.c_str( );
 
-		_DebugWarning( "[ServerSecure] Checking file \"%s\"\n", filepath );
+		DevMsg( "[ServerSecure] Checking file \"%s\"\n", filepath );
 
 		if( !Call( filepath ) )
 			return BlockDownload( filepath );

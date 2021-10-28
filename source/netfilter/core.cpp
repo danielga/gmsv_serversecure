@@ -1,7 +1,6 @@
 #include "core.hpp"
 #include "clientmanager.hpp"
-#include "debug.hpp"
-#include "baseserver.h"
+#include "baseserver.hpp"
 
 #include <GarrysMod/Lua/Interface.h>
 #include <GarrysMod/InterfacePointers.hpp>
@@ -21,6 +20,7 @@
 #include <steam/steam_gameserver.h>
 #include <game/server/iplayerinfo.h>
 #include <checksum_sha1.h>
+#include <dbg.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -230,7 +230,7 @@ namespace netfilter
 				if( file == nullptr )
 				{
 					reply_info.game_version = default_game_version;
-					_DebugWarning( "[ServerSecure] Error opening steam.inf\n" );
+					DevWarning( "[ServerSecure] Error opening steam.inf\n" );
 					return;
 				}
 
@@ -240,7 +240,7 @@ namespace netfilter
 				if( failed )
 				{
 					reply_info.game_version = default_game_version;
-					_DebugWarning( "[ServerSecure] Failed reading steam.inf\n" );
+					DevWarning( "[ServerSecure] Failed reading steam.inf\n" );
 					return;
 				}
 
@@ -591,7 +591,7 @@ namespace netfilter
 				sizeof( from )
 			);
 
-			_DebugWarning( "[ServerSecure] Handled %s info request using cache\n", IPToString( from.sin_addr ) );
+			DevMsg( "[ServerSecure] Handled %s info request using cache\n", IPToString( from.sin_addr ) );
 
 			return PacketType::Invalid; // we've handled it
 		}
@@ -601,7 +601,7 @@ namespace netfilter
 			const uint32_t time = static_cast<uint32_t>( Plat_FloatTime( ) );
 			if( !client_manager.CheckIPRate( from.sin_addr.s_addr, time ) )
 			{
-				_DebugWarning( "[ServerSecure] Client %s hit rate limit\n", IPToString( from.sin_addr ) );
+				DevWarning( "[ServerSecure] Client %s hit rate limit\n", IPToString( from.sin_addr ) );
 				return PacketType::Invalid;
 			}
 
@@ -615,7 +615,7 @@ namespace netfilter
 		{
 			if( len == 0 )
 			{
-				_DebugWarning(
+				DevWarning(
 					"[ServerSecure] Bad OOB! len: %d from %s\n",
 					len,
 					IPToString( from.sin_addr )
@@ -630,7 +630,7 @@ namespace netfilter
 			const int32_t channel = static_cast<int32_t>( packet.ReadLong( ) );
 			if( channel == -2 )
 			{
-				_DebugWarning(
+				DevWarning(
 					"[ServerSecure] Bad OOB! len: %d, channel: 0x%X from %s\n",
 					len,
 					channel,
@@ -651,7 +651,7 @@ namespace netfilter
 				case 's': // master server challenge
 					if( len > 100 )
 					{
-						_DebugWarning(
+						DevWarning(
 							"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 							len,
 							channel,
@@ -663,7 +663,7 @@ namespace netfilter
 
 					if( len >= 18 && strncmp( reinterpret_cast<const char *>( data + 5 ), "statusResponse", 14 ) == 0 )
 					{
-						_DebugWarning(
+						DevWarning(
 							"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 							len,
 							channel,
@@ -678,7 +678,7 @@ namespace netfilter
 				case 'T': // server info request (A2S_INFO)
 					if( ( len != 25 && len != 1200 ) || strncmp( reinterpret_cast<const char *>( data + 5 ), "Source Engine Query", 19 ) != 0 )
 					{
-						_DebugWarning(
+						DevWarning(
 							"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 							len,
 							channel,
@@ -694,7 +694,7 @@ namespace netfilter
 				case 'V': // rules request (A2S_RULES)
 					if( len != 9 && len != 1200 )
 					{
-						_DebugWarning(
+						DevWarning(
 							"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 							len,
 							channel,
@@ -708,7 +708,7 @@ namespace netfilter
 
 				case 'q': // connection handshake init
 				case 'k': // steam auth packet
-					_DebugMsg(
+					DevMsg(
 						"[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 						len,
 						channel,
@@ -718,7 +718,7 @@ namespace netfilter
 					return PacketType::Good;
 				}
 
-				_DebugWarning(
+				DevWarning(
 					"[ServerSecure] Bad OOB! len: %d, channel: 0x%X, type: %c from %s\n",
 					len,
 					channel,
@@ -809,7 +809,7 @@ namespace netfilter
 				return -1;
 
 			const ssize_t len = trampoline( s, buf, buflen, flags, from, fromlen );
-			_DebugWarning( "[ServerSecure] Called recvfrom on socket %d and received %d bytes\n", s, len );
+			DevMsg( "[ServerSecure] Called recvfrom on socket %d and received %d bytes\n", s, len );
 			if( len == -1 )
 				return -1;
 
@@ -828,7 +828,7 @@ namespace netfilter
 			if( !IsAddressAllowed( infrom ) )
 				return -1;
 
-			_DebugWarning( "[ServerSecure] Address %s was allowed\n", IPToString( infrom.sin_addr ) );
+			DevMsg( "[ServerSecure] Address %s was allowed\n", IPToString( infrom.sin_addr ) );
 
 			PacketType type = ClassifyPacket( buffer, len, infrom );
 			if( type == PacketType::Info )
@@ -848,12 +848,12 @@ namespace netfilter
 		{
 			if( s != game_socket )
 			{
-				_DebugWarning( "[ServerSecure] recvfrom detour called with socket %d, passing through\n", s );
+				DevMsg( "[ServerSecure] recvfrom detour called with socket %d, passing through\n", s );
 				auto trampoline = recvfrom_hook.GetTrampoline<recvfrom_t>( );
 				return trampoline != nullptr ? trampoline( s, buf, buflen, flags, from, fromlen ) : -1;
 			}
 
-			_DebugWarning( "[ServerSecure] recvfrom detour called with socket %d, detouring\n", s );
+			DevMsg( "[ServerSecure] recvfrom detour called with socket %d, detouring\n", s );
 
 			packet_t p;
 			const bool has_packet = PopPacketFromQueue( p );
@@ -889,7 +889,7 @@ namespace netfilter
 			{
 				if( IsPacketQueueFull( ) )
 				{
-					_DebugWarning( "[ServerSecure] Packet queue is full, sleeping for 100ms\n" );
+					DevWarning( "[ServerSecure] Packet queue is full, sleeping for 100ms\n" );
 					ThreadSleep( 100 );
 					continue;
 				}
@@ -902,7 +902,7 @@ namespace netfilter
 				if( res == -1 || !FD_ISSET( game_socket, &readables ) )
 					continue;
 
-				_DebugWarning( "[ServerSecure] Select passed\n" );
+				DevMsg( "[ServerSecure] Select passed\n" );
 
 				packet_t p;
 				p.buffer.resize( threaded_socket_max_buffer );
@@ -917,7 +917,7 @@ namespace netfilter
 				if( len == -1 )
 					continue;
 
-				_DebugWarning( "[ServerSecure] Pushing packet to queue\n" );
+				DevMsg( "[ServerSecure] Pushing packet to queue\n" );
 
 				p.buffer.resize( static_cast<size_t>( len ) );
 

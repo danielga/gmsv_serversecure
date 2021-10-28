@@ -1,5 +1,6 @@
 #include "clientmanager.hpp"
-#include "debug.hpp"
+
+#include <dbg.h>
 
 namespace netfilter
 {
@@ -28,7 +29,7 @@ namespace netfilter
 			++global_count;
 			if( global_count / max_window >= global_max_sec )
 			{
-				_DebugWarning(
+				DevWarning(
 					"[ServerSecure] %d.%d.%d.%d reached the global query limit!\n",
 					( from >> 24 ) & 0xFF,
 					( from >> 16 ) & 0xFF,
