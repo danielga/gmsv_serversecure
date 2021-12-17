@@ -38,6 +38,8 @@
 #define NOMINMAX
 #define SERVERSECURE_CALLING_CONVENTION __stdcall
 
+#include <windows.h>
+#include <processthreadsapi.h>
 #include <WinSock2.h>
 #include <Ws2tcpip.h>
 
@@ -48,6 +50,7 @@ typedef int32_t recvlen_t;
 
 #define SERVERSECURE_CALLING_CONVENTION
 
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -63,6 +66,7 @@ static const SOCKET INVALID_SOCKET = -1;
 
 #define SERVERSECURE_CALLING_CONVENTION
 
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -925,6 +929,24 @@ namespace netfilter
 
 		static uintp PacketReceiverThread( void *param )
 		{
+
+#ifdef SYSTEM_WINDOWS
+
+			SetThreadDescription(
+				GetCurrentThread( ),
+				L"serversecure packet receiver/analyzer"
+			);
+
+#elif SYSTEM_LINUX
+
+			prctl( PR_SET_NAME, reinterpret_cast<unsigned long>( "serversecure" ), 0, 0, 0 );
+
+#elif SYSTEM_MACOSX
+
+			pthread_setname_np( "serversecure" );
+
+#endif
+
 			return static_cast<Core *>( param )->HandleThread( );
 		}
 	};
