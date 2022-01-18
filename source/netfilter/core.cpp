@@ -927,15 +927,30 @@ namespace netfilter
 			return 0;
 		}
 
-		static uintp PacketReceiverThread( void *param )
+		static void SetThreadName( )
 		{
 
 #ifdef SYSTEM_WINDOWS
 
-			SetThreadDescription(
-				GetCurrentThread( ),
-				L"serversecure packet receiver/analyzer"
+			using SetThreadDescription_t = decltype( &SetThreadDescription );
+
+			const HMODULE kernel_base_module = GetModuleHandle( "KernelBase.dll" );
+			if( kernel_base_module == nullptr )
+			{
+				_DebugWarning( "[ServerSecure] Unable to get module handle for KernelBase.dll\n" );
+				return;
+			}
+
+			const auto SetThreadDescription_p = reinterpret_cast<SetThreadDescription_t>(
+				GetProcAddress( kernel_base_module, "SetThreadDescription" )
 			);
+			if( SetThreadDescription_p == nullptr )
+			{
+				_DebugWarning( "[ServerSecure] Unable to get pointer to SetThreadDescription\n" );
+				return;
+			}
+
+			SetThreadDescription_p( GetCurrentThread( ), L"serversecure packet receiver/analyzer" );
 
 #elif SYSTEM_LINUX
 
@@ -947,6 +962,11 @@ namespace netfilter
 
 #endif
 
+		}
+
+		static uintp PacketReceiverThread( void *param )
+		{
+			SetThreadName( );
 			return static_cast<Core *>( param )->HandleThread( );
 		}
 	};
