@@ -12,8 +12,6 @@ require("serversecure")
 
 serversecure.EnableFileValidation(true) -- validates files requested by clients for download
 
-serversecure.EnableThreadedSocket(true) -- receives packets from the game socket on another thread (as well as analyzing it)
-
 serversecure.EnablePacketValidation(true) -- validates packets for having correct types, size, content, etc.
 
 serversecure.EnableInfoCache(true) -- enable A2S_INFO response cache
