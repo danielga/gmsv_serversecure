@@ -748,7 +748,7 @@ private:
 
     const ssize_t len = trampoline(s, buf, buflen, flags, from, fromlen);
     DevMsg(
-        "[ServerSecure] Called recvfrom on socket %d and received %d bytes\n",
+        "[ServerSecure] Called recvfrom on socket %d and received %ld bytes\n",
         s, len);
     if (len == -1) {
       return -1;
