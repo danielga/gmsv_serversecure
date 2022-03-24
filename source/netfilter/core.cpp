@@ -24,6 +24,7 @@
 
 #include <array>
 #include <atomic>
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -49,6 +50,9 @@
 using ssize_t = int32_t;
 using recvlen_t = int32_t;
 
+#define PRIiSOCKET PRIuPTR
+#define PRIiSSIZE PRIi32
+
 #elif defined SYSTEM_POSIX
 
 #define SERVERSECURE_CALLING_CONVENTION
@@ -73,6 +77,9 @@ typedef int32_t SOCKET;
 typedef size_t recvlen_t;
 
 static const SOCKET INVALID_SOCKET = -1;
+
+#define PRIiSOCKET PRIi32
+#define PRIiSSIZE PRIiPTR
 
 #endif
 
@@ -747,9 +754,9 @@ private:
     }
 
     const ssize_t len = trampoline(s, buf, buflen, flags, from, fromlen);
-    DevMsg(
-        "[ServerSecure] Called recvfrom on socket %d and received %d bytes\n",
-        s, len);
+    DevMsg("[ServerSecure] Called recvfrom on socket %" PRIiSOCKET
+           " and received %" PRIiSSIZE " bytes\n",
+           s, len);
     if (len == -1) {
       return -1;
     }
