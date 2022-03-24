@@ -860,11 +860,25 @@ private:
     return 0;
   }
 
-  static uintp PacketReceiverThread(void *param) {
+  static void SetThreadName() {
 #ifdef SYSTEM_WINDOWS
 
-    SetThreadDescription(GetCurrentThread(),
-                         L"serversecure packet receiver/analyzer");
+    using SetThreadDescription_t = decltype(&SetThreadDescription);
+
+    const HMODULE kernel_base_module = GetModuleHandle("KernelBase.dll");
+    if (kernel_base_module != nullptr) {
+      return;
+    }
+
+    const auto SetThreadDescription_p =
+        reinterpret_cast<SetThreadDescription_t>(
+            GetProcAddress(kernel_base_module, "SetThreadDescription"));
+    if (SetThreadDescription_p == nullptr) {
+      return;
+    }
+
+    SetThreadDescription_p(GetCurrentThread(),
+                           L"serversecure packet receiver/analyzer");
 
 #elif SYSTEM_LINUX
 
@@ -876,7 +890,10 @@ private:
     pthread_setname_np("serversecure");
 
 #endif
+  }
 
+  static uintp PacketReceiverThread(void *param) {
+    SetThreadName();
     return static_cast<Core *>(param)->HandleThread();
   }
 };
