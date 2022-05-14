@@ -11,9 +11,9 @@
 #include <string>
 
 namespace global {
-static constexpr std::string_view Version = "serversecure 1.5.38";
+static constexpr std::string_view Version = "serversecure 1.5.40";
 // version num follows LuaJIT style, xxyyzz
-static constexpr uint32_t VersionNum = 10538;
+static constexpr uint32_t VersionNum = 10540;
 
 static IServer *server = nullptr;
 
