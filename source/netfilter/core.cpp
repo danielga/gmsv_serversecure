@@ -91,6 +91,8 @@ struct netsocket_t {
 };
 
 namespace netfilter {
+static bool CheckChallengeNr(const netadr_t &adr, const int nChallengeValue);
+
 class Core {
 private:
   struct server_tags_t {
@@ -481,6 +483,7 @@ private:
 
   static constexpr std::string_view default_game_version = "2020.10.14";
   static constexpr uint8_t default_proto_version = 17;
+  static constexpr uint8_t default_netproto_version = 24;
 
   static constexpr size_t packet_sampling_max_queue = 50;
 
@@ -577,7 +580,7 @@ private:
            info_cache_packet.GetNumBytesWritten(), 0,
            reinterpret_cast<const sockaddr *>(&from), sizeof(from));
 
-    DevMsg("[ServerSecure] Handled %s info request using cache\n",
+    DevMsg(2, "[ServerSecure] Handled %s info request using cache\n",
            IPToString(from.sin_addr));
 
     return PacketType::Invalid; // we've handled it
@@ -586,7 +589,7 @@ private:
   PacketType HandleInfoQuery(const sockaddr_in &from) {
     const auto time = static_cast<uint32_t>(Plat_FloatTime());
     if (!client_manager.CheckIPRate(from.sin_addr.s_addr, time)) {
-      DevWarning("[ServerSecure] Client %s hit rate limit\n",
+      DevWarning(2, "[ServerSecure] Client %s hit rate limit\n",
                  IPToString(from.sin_addr));
       return PacketType::Invalid;
     }
@@ -599,7 +602,7 @@ private:
   }
 
   PacketType ClassifyPacket(const uint8_t *data, int32_t len,
-                            const sockaddr_in &from) const {
+                            const sockaddr_in &from) {
     if (len == 0) {
       DevWarning("[ServerSecure] Bad OOB! len: %d from %s\n", len,
                  IPToString(from.sin_addr));
@@ -668,11 +671,83 @@ private:
         return PacketType::Good;
 
       case 'q': // connection handshake init
-      case 'k': // steam auth packet
-        DevMsg("[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
+        DevMsg(2, "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
                "%s\n",
                len, channel, type, IPToString(from.sin_addr));
         return PacketType::Good;
+
+      case 'k': // steam auth packet
+      {
+        const int32_t protocol = packet.ReadLong();
+        if (protocol != default_netproto_version) {
+          DevWarning("[ServerSecure] Bad protocol number from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        const int32_t authProtocol = packet.ReadLong();
+        if (authProtocol != PROTOCOL_STEAM) {
+          DevWarning("[ServerSecure] Bad authentication protocol from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        const int32_t challengeNr = packet.ReadLong();
+
+        // pull the challenge number check early before we do any expensive
+        // processing on the connect
+        netadr_t netaddr{};
+        netaddr.SetFromSockadr(reinterpret_cast<const sockaddr *>(&from));
+        if (!CheckChallengeNr(netaddr, challengeNr)) {
+          DevWarning("[ServerSecure] Bad connection challenge from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        // rate limit the connections
+        const auto time = static_cast<uint32_t>(Plat_FloatTime());
+        if (!client_manager.CheckIPRate(from.sin_addr.s_addr, time)) {
+          DevWarning("[ServerSecure] Client %s hit rate limit\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        packet.ReadLong(); // client challenge
+
+        char name[256] = {0};
+        packet.ReadString(name, sizeof(name));
+
+        char password[256] = {0};
+        packet.ReadString(password, sizeof(password));
+
+        char productVersion[32] = {0};
+        packet.ReadString(productVersion, sizeof(productVersion));
+
+        const int32_t nVersionCheck =
+            reply_info.game_version.compare(productVersion);
+        if (nVersionCheck > 0) {
+          DevWarning("[ServerSecure] Old game version from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        } else if (nVersionCheck < 0) {
+          DevWarning("[ServerSecure] Newer game version from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        const int32_t keyLen = packet.ReadShort();
+        if (keyLen < 0 || keyLen > STEAM_KEYSIZE ||
+            packet.GetNumBytesLeft() < keyLen) {
+          DevWarning("[ServerSecure] Bad Steam key from %s\n",
+                     IPToString(from.sin_addr));
+          return PacketType::Invalid;
+        }
+
+        DevMsg(2, "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
+               "%s\n",
+               len, channel, type, IPToString(from.sin_addr));
+        return PacketType::Good;
+      }
 
       default:
         break;
@@ -754,7 +829,7 @@ private:
     }
 
     const ssize_t len = trampoline(s, buf, buflen, flags, from, fromlen);
-    DevMsg("[ServerSecure] Called recvfrom on socket %" PRIiSOCKET
+    DevMsg(3, "[ServerSecure] Called recvfrom on socket %" PRIiSOCKET
            " and received %" PRIiSSIZE " bytes\n",
            s, len);
     if (len == -1) {
@@ -776,7 +851,7 @@ private:
       return -1;
     }
 
-    DevMsg("[ServerSecure] Address %s was allowed\n",
+    DevMsg(3, "[ServerSecure] Address %s was allowed\n",
            IPToString(infrom.sin_addr));
 
     PacketType type = ClassifyPacket(buffer, len, infrom);
@@ -790,7 +865,8 @@ private:
   ssize_t HandleDetour(SOCKET s, void *buf, recvlen_t buflen, int32_t flags,
                        sockaddr *from, socklen_t *fromlen) {
     if (s != game_socket) {
-      DevMsg("[ServerSecure] recvfrom detour called with socket %d, passing "
+      DevMsg(3,
+             "[ServerSecure] recvfrom detour called with socket %d, passing "
              "through\n",
              s);
       auto trampoline = recvfrom_hook.GetTrampoline<recvfrom_t>();
@@ -799,7 +875,8 @@ private:
                  : -1;
     }
 
-    DevMsg("[ServerSecure] recvfrom detour called with socket %d, detouring\n",
+    DevMsg(3,
+           "[ServerSecure] recvfrom detour called with socket %d, detouring\n",
            s);
 
     packet_t p;
@@ -845,7 +922,7 @@ private:
         continue;
       }
 
-      DevMsg("[ServerSecure] Select passed\n");
+      DevMsg(3, "[ServerSecure] Select passed\n");
 
       packet_t p;
       p.buffer.resize(threaded_socket_max_buffer);
@@ -857,7 +934,7 @@ private:
         continue;
       }
 
-      DevMsg("[ServerSecure] Pushing packet to queue\n");
+      DevMsg(3, "[ServerSecure] Pushing packet to queue\n");
 
       p.buffer.resize(static_cast<size_t>(len));
 
@@ -1049,7 +1126,8 @@ public:
   CBaseServerProxy &operator=(const CBaseServerProxy &) = delete;
   CBaseServerProxy &operator=(CBaseServerProxy &&) = delete;
 
-  virtual bool CheckChallengeNr(netadr_t &adr, int nChallengeValue) {
+  virtual bool CheckChallengeNr(const netadr_t &adr,
+                                const int nChallengeValue) {
     // See if the challenge is valid
     // Don't care if it is a local address.
     if (adr.IsLoopback()) {
@@ -1142,6 +1220,14 @@ std::array<uint32_t, 5> CBaseServerProxy::m_previous_challenge;
 std::array<uint32_t, 5> CBaseServerProxy::m_challenge;
 
 std::unique_ptr<CBaseServerProxy> CBaseServerProxy::Singleton;
+
+static bool CheckChallengeNr(const netadr_t &adr, const int nChallengeValue) {
+  if (!CBaseServerProxy::Singleton) {
+    return false;
+  }
+
+  return CBaseServerProxy::Singleton->CheckChallengeNr(adr, nChallengeValue);
+}
 
 void Initialize(GarrysMod::Lua::ILuaBase *LUA) {
   LUA->GetField(GarrysMod::Lua::INDEX_GLOBAL, "VERSION");
