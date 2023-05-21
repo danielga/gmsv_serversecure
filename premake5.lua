@@ -24,3 +24,17 @@ CreateWorkspace({name = "serversecure.core", abi_compatible = true})
 			"source/netfilter/*.cpp",
 			"source/netfilter/*.hpp"
 		})
+
+	group("")
+		project("testing")
+			kind("ConsoleApp")
+			includedirs({"source", "source/testing"})
+			files({
+				"source/netfilter/client.cpp",
+				"source/netfilter/client.hpp",
+				"source/netfilter/clientmanager.cpp",
+				"source/netfilter/clientmanager.hpp",
+				"source/netfilter/objectpool.hpp",
+				"source/testing/*.cpp",
+				"source/testing/*.hpp"
+			})

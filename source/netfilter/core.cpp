@@ -597,9 +597,14 @@ private:
 
   PacketType HandleInfoQuery(const sockaddr_in &from) {
     const auto time = static_cast<uint32_t>(Plat_FloatTime());
-    if (!client_manager.CheckIPRate(from.sin_addr.s_addr, time)) {
-      DevWarning(2, "[ServerSecure] Client %s hit rate limit\n",
-                 IPToString(from.sin_addr));
+    const auto rate_limit =
+        client_manager.CheckIPRate(from.sin_addr.s_addr, time);
+    if (rate_limit != ClientManager::RateLimitType::None) {
+      DevWarning("[ServerSecure] Client %s hit %s rate limit\n",
+                 IPToString(from.sin_addr),
+                 rate_limit == ClientManager::RateLimitType::Individual
+                     ? "individual"
+                     : "global");
       return PacketType::Invalid;
     }
 
@@ -716,9 +721,14 @@ private:
 
         // rate limit the connections
         const auto time = static_cast<uint32_t>(Plat_FloatTime());
-        if (!client_manager.CheckIPRate(from.sin_addr.s_addr, time)) {
-          DevWarning("[ServerSecure] Client %s hit rate limit\n",
-                     IPToString(from.sin_addr));
+        const auto rate_limit =
+            client_manager.CheckIPRate(from.sin_addr.s_addr, time);
+        if (rate_limit != ClientManager::RateLimitType::None) {
+          DevWarning("[ServerSecure] Client %s hit %s rate limit\n",
+                     IPToString(from.sin_addr),
+                     rate_limit == ClientManager::RateLimitType::Individual
+                         ? "individual"
+                         : "global");
           return PacketType::Invalid;
         }
 

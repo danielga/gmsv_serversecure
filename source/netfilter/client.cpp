@@ -1,36 +1,60 @@
 #include "client.hpp"
-#include "clientmanager.hpp"
-
-#include <dbg.h>
 
 namespace netfilter {
-Client::Client(ClientManager &_manager, uint32_t _address)
-    : manager(_manager), address(_address), last_reset(0), count(0) {}
+Client::Client(const uint32_t address) : m_address(address) {}
 
-Client::Client(ClientManager &_manager, uint32_t _address, uint32_t time)
-    : manager(_manager), address(_address), last_reset(time), count(1) {}
+Client::Client(const uint32_t address, const uint32_t time,
+               const uint32_t attempts)
+    : m_address(address), m_last_ping(time), m_last_reset(time),
+      m_count(attempts) {}
 
-bool Client::CheckIPRate(uint32_t time) {
-  if (time - last_reset >= manager.GetMaxQueriesWindow()) {
-    last_reset = time;
-    count = 1;
-  } else {
-    ++count;
-    if (count / manager.GetMaxQueriesWindow() >=
-        manager.GetMaxQueriesPerSecond()) {
-      DevWarning("[ServerSecure] %d.%d.%d.%d reached its query limit!\n",
-                 (address >> 24) & 0xFF, (address >> 16) & 0xFF,
-                 (address >> 8) & 0xFF, address & 0xFF);
-      return false;
-    }
-  }
-
-  return true;
+void Client::Reset(const uint32_t address, const uint32_t time,
+                   const uint32_t attempts) {
+  m_address = address;
+  m_last_ping = time;
+  m_last_reset = time;
+  m_count = attempts;
+  m_marked_for_removal = false;
 }
 
-uint32_t Client::GetAddress() const { return address; }
+Client::RateLimitType Client::CheckIPRate(const uint32_t time,
+                                          const uint32_t max_sec,
+                                          const uint32_t max_window,
+                                          const uint32_t attempts) {
+  m_last_ping = time;
 
-bool Client::TimedOut(uint32_t time) const {
-  return time - last_reset >= ClientManager::ClientTimeout;
+  m_count += attempts;
+
+  if (time - m_last_reset >= max_window) {
+    const uint32_t previous_count = m_count;
+    m_last_reset = time;
+    m_count = attempts;
+
+    if (previous_count > max_sec * max_window) {
+      return RateLimitType::Sustained;
+    }
+  } else if (m_count >= max_sec * max_window) {
+    return RateLimitType::Limited;
+  }
+
+  return RateLimitType::None;
+}
+
+uint32_t Client::GetHitCount() const { return m_count; }
+
+uint32_t Client::GetAddress() const { return m_address; }
+
+uint32_t Client::GetLastPing() const { return m_last_ping; }
+
+bool Client::TimedOut(const uint32_t time, const uint32_t max_window) const {
+  return time - m_last_reset >= max_window * 2;
+}
+
+void Client::MarkForRemoval() { m_marked_for_removal = true; }
+
+bool Client::MarkedForRemoval() const { return m_marked_for_removal; }
+
+bool Client::operator<(const Client &rhs) const {
+  return m_last_ping < rhs.m_last_ping;
 }
 } // namespace netfilter
