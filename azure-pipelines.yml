@@ -6,6 +6,7 @@ variables:
   GARRYSMOD_COMMON_REPOSITORY: https://github.com/danielga/garrysmod_common.git
   PROJECT_GENERATOR_VERSION: 2
   REPOSITORY_DIR: $(System.DefaultWorkingDirectory)
+  DISABLE_X86_64_BUILD: false
 trigger:
   batch: true
   branches:
@@ -24,15 +25,15 @@ jobs:
   displayName: Windows
   pool:
     name: Azure Pipelines
-    vmImage: windows-2019
+    vmImage: windows-2022
   timeoutInMinutes: 10
   variables:
     BOOTSTRAP_URL: https://raw.githubusercontent.com/danielga/garrysmod_common/master/build/bootstrap.ps1
     BUILD_SCRIPT: $(System.DefaultWorkingDirectory)/dependencies/garrysmod_common/build/build.ps1
-    COMPILER_PLATFORM: vs2019
+    COMPILER_PLATFORM: vs2022
     PROJECT_OS: windows
     PREMAKE5: $(System.DefaultWorkingDirectory)/dependencies/windows/premake-core/premake5.exe
-    PREMAKE5_URL: https://github.com/danielga/garrysmod_common/releases/download/premake5/premake-5.0.0-alpha16-windows.zip
+    PREMAKE5_URL: https://github.com/danielga/garrysmod_common/releases/download/premake-build%2F5.0.0-beta2/premake-5.0.0-beta2-windows.zip
   steps:
   - checkout: self
     clean: true
@@ -45,23 +46,22 @@ jobs:
   - task: CopyFiles@2
     displayName: 'Copy files to $(Build.ArtifactStagingDirectory)'
     inputs:
-      SourceFolder: '$(System.DefaultWorkingDirectory)/projects/windows/vs2019'
+      SourceFolder: '$(System.DefaultWorkingDirectory)/projects/windows/vs2022'
       Contents: '*/Release/*.dll'
       TargetFolder: '$(Build.ArtifactStagingDirectory)'
       CleanTargetFolder: true
       flattenFolders: true
       preserveTimestamp: true
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publish build artifacts'
-    inputs:
-      ArtifactName: windows
+  - publish: '$(Build.ArtifactStagingDirectory)'
+    displayName: 'Publish Windows binaries'
+    artifact: windows
 - job: linux
   displayName: Linux
   pool:
     name: Azure Pipelines
-    vmImage: ubuntu-latest
+    vmImage: ubuntu-22.04
   container:
-    image: registry.gitlab.steamos.cloud/steamrt/scout/sdk:latest
+    image: danielga/steamrt-scout:latest
     options: -v /home
   timeoutInMinutes: 10
   variables:
@@ -70,7 +70,7 @@ jobs:
     COMPILER_PLATFORM: gmake
     PREMAKE5: $(System.DefaultWorkingDirectory)/dependencies/linux/premake-core/premake5
     PROJECT_OS: linux
-    PREMAKE5_URL: https://github.com/danielga/garrysmod_common/releases/download/premake5/premake-5.0.0-alpha16-linux.tar.gz
+    PREMAKE5_URL: https://github.com/danielga/garrysmod_common/releases/download/premake-build%2F5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
     CC: gcc-9
     CXX: g++-9
     AR: gcc-ar-9
@@ -94,30 +94,67 @@ jobs:
       CleanTargetFolder: true
       flattenFolders: true
       preserveTimestamp: true
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publish build artifacts'
+  - publish: '$(Build.ArtifactStagingDirectory)'
+    displayName: 'Publish Linux binaries'
+    artifact: linux
+- job: macosx
+  displayName: macOS
+  pool:
+    name: Azure Pipelines
+    vmImage: macOS-11
+  timeoutInMinutes: 10
+  variables:
+    BOOTSTRAP_URL: https://raw.githubusercontent.com/danielga/garrysmod_common/master/build/bootstrap.sh
+    BUILD_SCRIPT: $(System.DefaultWorkingDirectory)/dependencies/garrysmod_common/build/build.sh
+    COMPILER_PLATFORM: gmake
+    PREMAKE5: $(System.DefaultWorkingDirectory)/dependencies/macosx/premake-core/premake5
+    PROJECT_OS: macosx
+    PREMAKE5_URL: https://github.com/danielga/garrysmod_common/releases/download/premake-build%2F5.0.0-beta2/premake-5.0.0-beta2-macosx.tar.gz
+    MACOSX_SDK_URL: https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX10.7.sdk.tar.xz
+    MACOSX_SDK_DIRECTORY: $(System.DefaultWorkingDirectory)/dependencies/macosx/MacOSX10.7.sdk
+    SDKROOT: $(System.DefaultWorkingDirectory)/dependencies/macosx/MacOSX10.7.sdk
+    AR: ar
+  steps:
+  - checkout: self
+    clean: true
+    fetchDepth: 1
+    submodules: recursive
+  - bash: 'curl -s -L "$BOOTSTRAP_URL" | bash'
+    displayName: Bootstrap
+  - bash: |
+      sudo xcode-select -s "/Applications/Xcode_11.7.app/Contents/Developer"
+      $BUILD_SCRIPT
+    displayName: Build
+  - task: CopyFiles@2
+    displayName: 'Copy files to $(Build.ArtifactStagingDirectory)'
     inputs:
-      ArtifactName: linux
+      SourceFolder: '$(System.DefaultWorkingDirectory)/projects/macosx/gmake'
+      Contents: '*/Release/*.dll'
+      TargetFolder: '$(Build.ArtifactStagingDirectory)'
+      CleanTargetFolder: true
+      flattenFolders: true
+      preserveTimestamp: true
+  - publish: '$(Build.ArtifactStagingDirectory)'
+    displayName: 'Publish macOS binaries'
+    artifact: macosx
 - job: publish
   displayName: Publish to GitHub Releases
   pool:
     name: Azure Pipelines
-    vmImage: ubuntu-latest
+    vmImage: ubuntu-22.04
   timeoutInMinutes: 5
   dependsOn:
     - windows
     - linux
+    - macosx
   condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
   steps:
-  - task: DownloadBuildArtifacts@0
-    displayName: 'Download build artifacts'
-    inputs:
-      downloadType: specific
-      parallelizationLimit: 12
+  - download: current
+    patterns: '**/*.dll'
   - task: GitHubRelease@1
     displayName: 'Publish GitHub release $(build.sourceBranchName)'
     inputs:
       gitHubConnection: 'GitHub danielga'
       releaseNotesSource: inline
-      assets: '$(System.ArtifactsDirectory)/**'
+      assets: '$(Pipeline.Workspace)/**/*.dll'
       addChangeLog: false
