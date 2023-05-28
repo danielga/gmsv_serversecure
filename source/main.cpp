@@ -5,6 +5,7 @@
 #include <GarrysMod/Lua/Interface.h>
 #include <Platform.hpp>
 
+#include <convar.h>
 #include <iserver.h>
 
 #include <cstdint>
@@ -27,6 +28,13 @@ static void PreInitialize(GarrysMod::Lua::ILuaBase *LUA) {
   if (server == nullptr) {
     LUA->ThrowError("failed to dereference IServer");
   }
+
+  cvar = g_pCVar = InterfacePointers::Cvar();
+  if (g_pCVar == nullptr) {
+    LUA->ThrowError("failed to retrieve ICVar");
+  }
+
+  ConVar_Register();
 
   LUA->CreateTable();
 
