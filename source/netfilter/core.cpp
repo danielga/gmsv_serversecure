@@ -223,7 +223,15 @@ public:
           dynamic_cast<CFileSystem_Stdio *>(filesystem)->Gamemodes()->Active();
 
       if (!gamemode.name.empty()) {
-        reply_info.tags.gm = gamemode.name;
+        // Check if gamemode name ends with "_modded"
+        static const std::string suffix = "_modded";
+        auto gm_name = gamemode.name;
+        if (gm_name.size() > suffix.size() &&
+            std::equal(gm_name.rbegin(), gm_name.rend(), suffix.rbegin())) {
+          gm_name = gm_name.substr(0, suffix.size());
+        }
+
+        reply_info.tags.gm = gm_name;
       } else {
         reply_info.tags.gm.clear();
       }
@@ -671,7 +679,8 @@ private:
         return PacketType::Good;
 
       case 'q': // connection handshake init
-        DevMsg(2, "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
+        DevMsg(2,
+               "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
                "%s\n",
                len, channel, type, IPToString(from.sin_addr));
         return PacketType::Good;
@@ -743,7 +752,8 @@ private:
           return PacketType::Invalid;
         }
 
-        DevMsg(2, "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
+        DevMsg(2,
+               "[ServerSecure] Good OOB! len: %d, channel: 0x%X, type: %c from "
                "%s\n",
                len, channel, type, IPToString(from.sin_addr));
         return PacketType::Good;
@@ -829,7 +839,8 @@ private:
     }
 
     const ssize_t len = trampoline(s, buf, buflen, flags, from, fromlen);
-    DevMsg(3, "[ServerSecure] Called recvfrom on socket %" PRIiSOCKET
+    DevMsg(3,
+           "[ServerSecure] Called recvfrom on socket %" PRIiSOCKET
            " and received %" PRIiSSIZE " bytes\n",
            s, len);
     if (len == -1) {
