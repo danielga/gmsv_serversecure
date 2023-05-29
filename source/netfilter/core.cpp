@@ -33,6 +33,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -224,11 +225,11 @@ public:
 
       if (!gamemode.name.empty()) {
         // Check if gamemode name ends with "_modded"
-        static const std::string suffix = "_modded";
-        auto gm_name = gamemode.name;
+        static const std::string_view suffix = "_modded";
+        std::string_view gm_name = gamemode.name;
         if (gm_name.size() > suffix.size() &&
-            std::equal(gm_name.rbegin(), gm_name.rend(), suffix.rbegin())) {
-          gm_name = gm_name.substr(0, suffix.size());
+            gm_name.substr(gm_name.size() - suffix.size()) == suffix) {
+          gm_name = gm_name.substr(0, gm_name.size() - suffix.size());
         }
 
         reply_info.tags.gm = gm_name;
