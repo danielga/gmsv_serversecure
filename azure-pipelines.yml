@@ -154,7 +154,7 @@ jobs:
   - task: GitHubRelease@1
     displayName: 'Publish GitHub release $(build.sourceBranchName)'
     inputs:
-      gitHubConnection: 'GitHub danielga'
+      gitHubConnection: 'GitHub 32east'
       releaseNotesSource: inline
       assets: '$(Pipeline.Workspace)/**/*.dll'
       addChangeLog: false
