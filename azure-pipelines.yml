@@ -122,7 +122,7 @@ jobs:
   - bash: 'curl -s -L "$BOOTSTRAP_URL" | bash'
     displayName: Bootstrap
   - bash: |
-      sudo xcode-select -s "/Applications/Xcode_11.7.app/Contents/Developer"
+      sudo xcode-select -s "/Applications/Xcode_16.4.app/Contents/Developer"
       $BUILD_SCRIPT
     displayName: Build
   - task: CopyFiles@2
