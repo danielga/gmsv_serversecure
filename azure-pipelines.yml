@@ -101,7 +101,7 @@ jobs:
   displayName: macOS
   pool:
     name: Azure Pipelines
-    vmImage: macOS-11
+    vmImage: macOS-15
   timeoutInMinutes: 10
   variables:
     BOOTSTRAP_URL: https://raw.githubusercontent.com/danielga/garrysmod_common/master/build/bootstrap.sh
